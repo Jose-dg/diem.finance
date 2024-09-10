@@ -1,7 +1,6 @@
 from django.contrib import admin
 from .models import AccountMethodAmount, DocumentType, Label, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
-from django.utils.functional import SimpleLazyObject
-from django.contrib.auth import get_user_model
+
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -38,34 +37,11 @@ class AddressAdmin(admin.ModelAdmin):
 class UserAdminWithAddress(UserAdmin):
     inlines = [AddressInline]
 
-
 # Admin para el modelo Role
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
     list_display = ('name', 'group')  # Muestra el nombre del rol y el grupo asociado
     search_fields = ('name', 'group__name')  # Permite búsqueda por nombre del rol y del grupo
-
-# Registrar otros modelos como ya lo tienes
-@admin.register(Credit)
-class CreditAdmin(admin.ModelAdmin):
-    list_display = (
-        'uid', 'state', 'morosidad_level', 'client', 'cost', 'price', 
-        'credit_days', 'earnings', 'interest', 'periodicity', 'total_abonos','pending_amount', 
-        'installment_number', 'installment_value'
-    )
-    search_fields = ('uid', 'client__username')
-
-    exclude = ('interest', 'refinancing', 'total_abonos', 'pending_amount', 'installment_number', 'installment_value', 'is_in_default', 'morosidad_level')
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "registered_by":
-            kwargs["queryset"] = get_user_model().objects.filter(is_staff=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def save_model(self, request, obj, form, change):
-        if not obj.pk:
-            obj.registered_by = request.user
-        super().save_model(request, obj, form, change)
 
 # Registrar otros modelos sin cambios significativos
 @admin.register(DocumentType)
@@ -97,26 +73,7 @@ class AccountAdmin(admin.ModelAdmin):
 class LabelAdmin(admin.ModelAdmin):
     list_display = ('name', 'position')
     search_fields = ('name', 'position')
-   
-class AccountMethodAmountInline(admin.TabularInline):
-    model = AccountMethodAmount
-    extra = 1
-
-class TransactionAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'transaction_type', 'display_currency', 'display_client', 'date')
-    search_fields = ('transaction_type', 'description')
-
-    def display_currency(self, obj):
-        return obj.credit.currency if obj.credit else None
-
-    def display_client(self, obj):
-        return obj.credit.client if obj.credit else None
-
-    display_currency.short_description = 'Currency'
-    display_client.short_description = 'Client'
-
-admin.site.register(Transaction, TransactionAdmin)
-    
+  
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
     list_display = ('category', 'amount', 'account', 'date', 'registered_by')
@@ -156,3 +113,52 @@ class CurrencyAdmin(admin.ModelAdmin):
 class PeriodicityAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
+
+ 
+class AccountMethodAmountInline(admin.TabularInline):
+    model = AccountMethodAmount
+    extra = 1
+
+@admin.register(Transaction)
+class TransactionAdmin(admin.ModelAdmin):
+    list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
+    search_fields = ('transaction_type', 'category__name', 'user__username')  # Cambié 'client__name' por 'user__username' porque 'client' no existe como tal
+
+    def get_currency(self, obj):
+        inline = obj.account_method_amounts.first()  # Obtenemos el primer AccountMethodAmount
+        return inline.currency if inline else "No Currency"
+    get_currency.short_description = 'Currency'
+
+    def get_client(self, obj):
+        return obj.user.username if obj.user else "No Client"
+    get_client.short_description = 'Client'
+
+    def display_payment_method(self, obj):
+        # Mostrar el método de pago asociado
+        inline = obj.account_method_amounts.first()
+        return inline.payment_method.name if inline else "No Payment Method"
+    display_payment_method.short_description = 'Payment Method'
+    
+    def display_amount_paid(self, obj):
+        # Mostrar el monto pagado asociado
+        inline = obj.account_method_amounts.first()
+        return inline.amount_paid if inline else "No Amount Paid"
+    display_amount_paid.short_description = 'Amount Paid'
+
+
+@admin.register(Credit)
+class CreditAdmin(admin.ModelAdmin):
+    list_display = (
+        'uid', 'state', 'morosidad_level', 'user', 'cost', 'price', 
+        'credit_days', 'earnings', 'interest', 'periodicity', 'total_abonos','pending_amount', 
+        'installment_number', 'installment_value'
+    )
+    search_fields = ('uid', 'user__username')
+
+    exclude = ('interest', 'refinancing', 'total_abonos', 'pending_amount', 'installment_number', 'installment_value', 'is_in_default', 'morosidad_level')
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.registered_by = request.user
+        super().save_model(request, obj, form, change)
+

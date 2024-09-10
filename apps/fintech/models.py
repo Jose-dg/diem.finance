@@ -1,4 +1,4 @@
-from django.contrib.auth.models import AbstractUser, Group
+from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.db import models
 import uuid
 from django.contrib.auth import get_user_model  
@@ -63,40 +63,13 @@ class Label(models.Model):
 
     def __str__(self):
         return f"{self.name}" 
-    
-class User(AbstractUser):
-    id_user = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    document = models.ForeignKey('Identifier', null=True, blank=True, on_delete=models.SET_NULL)
-    country = models.ForeignKey('Country', null=True, blank=True, on_delete=models.SET_NULL)
-    city = models.ForeignKey('ParamsLocation', null=True, blank=True, on_delete=models.SET_NULL)
-    billing_address = models.CharField(max_length=255, default='')
-    address_shipping = models.CharField(max_length=255, default='')
-    phone_1 = models.ForeignKey('PhoneNumber', on_delete=models.CASCADE, null=True, blank=True)
-    label = models.ForeignKey('Label', null=True, blank=True, on_delete=models.CASCADE)
-    reference_1 = models.CharField(max_length=255, null=True, blank=True)
-    reference_2 = models.CharField(max_length=255, null=True, blank=True)
-    electronic_id = models.CharField(max_length=50, blank=True, null=True)
 
-    groups = models.ManyToManyField(Group, related_name='fintech_user_groups')
-
-    user_permissions = None
-
-    def __str__(self):
-        return self.username
-   
 class Address(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='addresses')
     address_type = models.CharField(max_length=50, choices=[('billing', 'Billing'), ('shipping', 'Shipping')])
     address = models.CharField(max_length=255)
     city = models.CharField(max_length=100)
     country = models.ForeignKey(Country, on_delete=models.SET_NULL, null=True)
-
-class Role(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    group = models.OneToOneField(Group, on_delete=models.CASCADE)
-
-    def __str__(self):
-        return self.name
 
 class CategoryType(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
@@ -201,6 +174,49 @@ class AccountMethodAmount(models.Model):
     def __str__(self):
         return f"Payment method {self.payment_method.name} - Amount Paid: {self.amount_paid}"
 
+
+class Role(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    group = models.OneToOneField(Group, on_delete=models.CASCADE)
+    is_staff_role = models.BooleanField(default=False)  
+
+    def __str__(self):
+        return self.name
+        
+class User(AbstractUser):
+    id_user = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    document = models.ForeignKey(Identifier, null=True, blank=True, on_delete=models.SET_NULL)
+    country = models.ForeignKey(Country, null=True, blank=True, on_delete=models.SET_NULL)
+    city = models.ForeignKey(ParamsLocation, null=True, blank=True, on_delete=models.SET_NULL)
+    billing_address = models.CharField(max_length=255, default='')
+    address_shipping = models.CharField(max_length=255, default='')
+    phone_1 = models.ForeignKey(PhoneNumber, on_delete=models.CASCADE, null=True, blank=True)
+    label = models.ForeignKey(Label, null=True, blank=True, on_delete=models.CASCADE)
+    reference_1 = models.CharField(max_length=255, null=True, blank=True)
+    reference_2 = models.CharField(max_length=255, null=True, blank=True)
+    electronic_id = models.CharField(max_length=50, blank=True, null=True)
+
+    # Relación con Role
+    role = models.ForeignKey(Role, null=True, blank=True, on_delete=models.SET_NULL)
+    groups = models.ManyToManyField(
+        Group,
+        related_name='fintech_user_set',  # Cambia el related_name para evitar el conflicto
+        blank=True,
+        help_text=('The groups this user belongs to. A user will get all permissions granted to each of their groups.'),
+        verbose_name=('groups'),
+    )
+
+    user_permissions = models.ManyToManyField(
+        Permission,
+        related_name='fintech_user_permissions_set',  # Cambia el related_name para evitar el conflicto
+        blank=True,
+        help_text=('Specific permissions for this user.'),
+        verbose_name=('user permissions'),
+    )
+
+    def __str__(self):
+        return self.username
+   
 class Credit(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
@@ -214,8 +230,8 @@ class Credit(models.Model):
     )
 
     # Aquí ahora referenciamos el modelo User en lugar de get_user_model()
-    registered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='credits_registered')
-    client = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credits')  
+    registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='credits_registered')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credits')
 
     state = models.CharField(max_length=15, choices=ORDER_STATES, default='pending')
     subcategory = models.ForeignKey(SubCategory, null=True, blank=True, on_delete=models.SET_NULL)
@@ -250,7 +266,7 @@ class Credit(models.Model):
     ], default='on_time')
 
     def __str__(self):
-        return f"{self.client} - {self.subcategory}: Credit:{self.price}, pending:{self.pending_amount}"
+        return f"{self.user} - {self.subcategory}: Credit:{self.price}, pending:{self.pending_amount}"
 
     def save(self, *args, **kwargs):
         with db_transaction.atomic():
