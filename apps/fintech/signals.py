@@ -43,14 +43,3 @@ def adjust_account_balance_on_delete(sender, instance, **kwargs):
         instance.payment_method.balance -= instance.amount_paid
         instance.payment_method.save()
 
-@receiver(post_save, sender=Transaction)
-def calculate_morosidad(sender, instance, **kwargs):
-    """
-    Calcula la morosidad del crédito cada vez que se guarda una transacción (abono).
-    """
-    # Obtiene el crédito asociado a la transacción
-    credit = instance.credit
-
-    # Si existe un crédito asociado a la transacción, actualiza la morosidad
-    if credit:
-        credit.check_if_payment_is_due()

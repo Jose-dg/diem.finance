@@ -123,7 +123,8 @@ class AccountMethodAmountInline(admin.TabularInline):
 class TransactionAdmin(admin.ModelAdmin):
     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
     search_fields = ('transaction_type', 'category__name', 'user__username')  # Cambié 'client__name' por 'user__username' porque 'client' no existe como tal
-
+    inlines = [AccountMethodAmountInline]
+    
     def get_currency(self, obj):
         inline = obj.account_method_amounts.first()  # Obtenemos el primer AccountMethodAmount
         return inline.currency if inline else "No Currency"

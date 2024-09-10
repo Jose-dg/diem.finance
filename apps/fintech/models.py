@@ -138,30 +138,6 @@ class Periodicity(models.Model):
     def __str__(self):
         return f"{self.name}"
 
-class Transaction(models.Model):
-    TRANSACTION_TYPES = [
-        ('income', 'Income'),
-        ('expense', 'Expense')
-    ]
-    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    transaction_type = models.CharField(max_length=50, choices=TRANSACTION_TYPES)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='transactions')
-    user = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='transactions')
-    credit = models.ForeignKey('Credit', on_delete=models.SET_NULL, null=True, related_name='transactions')
-    date = models.DateTimeField(default=datetime.now)
-    description = models.TextField(null=True, blank=True)
- 
-    def save(self, *args, **kwargs):
-        with db_transaction.atomic():
-            super(Transaction, self).save(*args, **kwargs)  # Guarda la transacción primero
-
-            # Si la transacción es un abono (income) y está asociada a un crédito
-            if self.transaction_type == 'income' and self.credit:
-                inline_abono = self.account_method_amounts.first()  # Obtenemos el inline recién agregado
-                if inline_abono:
-                    self.credit.update_pending_amount(inline_abono.amount_paid)  # Actualiza el saldo pendiente en el crédito
-                    self.credit.save()  # Guarda el crédito actualizado
-
 class AccountMethodAmount(models.Model):
     payment_method = models.ForeignKey(Account, on_delete=models.CASCADE)
     payment_code = models.CharField(max_length=100, null=False, unique=True)
@@ -169,7 +145,7 @@ class AccountMethodAmount(models.Model):
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2, null=False)
     currency = models.ForeignKey(Currency, null=True, blank=True, on_delete=models.SET_NULL)
     credit = models.ForeignKey('Credit', on_delete=models.CASCADE, related_name='payments')
-    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name='account_method_amounts')
+    transaction = models.ForeignKey('Transaction', on_delete=models.CASCADE, related_name='account_method_amounts')
 
     def __str__(self):
         return f"Payment method {self.payment_method.name} - Amount Paid: {self.amount_paid}"
@@ -216,7 +192,8 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
-   
+
+
 class Credit(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
@@ -290,6 +267,31 @@ class Credit(models.Model):
                     self.installment_value = price
 
             super(Credit, self).save(*args, **kwargs)
+
+
+class Transaction(models.Model):
+    TRANSACTION_TYPES = [
+        ('income', 'Income'),
+        ('expense', 'Expense')
+    ]
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    transaction_type = models.CharField(max_length=50, choices=TRANSACTION_TYPES)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='transactions')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='transactions')
+    credit = models.ForeignKey(Credit, on_delete=models.SET_NULL, null=True, related_name='transactions')
+    date = models.DateTimeField(default=datetime.now)
+    description = models.TextField(null=True, blank=True)
+ 
+    def save(self, *args, **kwargs):
+        with db_transaction.atomic():
+            super(Transaction, self).save(*args, **kwargs)  # Guarda la transacción primero
+
+            # Si la transacción es un abono (income) y está asociada a un crédito
+            if self.transaction_type == 'income' and self.credit:
+                inline_abono = self.account_method_amounts.first()  # Obtenemos el inline recién agregado
+                if inline_abono:
+                    self.credit.update_pending_amount(inline_abono.amount_paid)  # Actualiza el saldo pendiente en el crédito
+                    self.credit.save()  # Guarda el crédito actualizado
 
 
 class Expense(models.Model):
