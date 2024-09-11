@@ -40,8 +40,8 @@ class UserAdminWithAddress(UserAdmin):
 # Admin para el modelo Role
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'group')  # Muestra el nombre del rol y el grupo asociado
-    search_fields = ('name', 'group__name')  # Permite búsqueda por nombre del rol y del grupo
+    list_display = ('name', 'is_staff_role')  # Muestra el nombre del rol y el grupo asociado
+    search_fields = ('name', 'is_staff_role')  # Permite búsqueda por nombre del rol y del grupo
 
 # Registrar otros modelos sin cambios significativos
 @admin.register(DocumentType)
@@ -124,7 +124,7 @@ class TransactionAdmin(admin.ModelAdmin):
     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
     search_fields = ('transaction_type', 'category__name', 'user__username')  # Cambié 'client__name' por 'user__username' porque 'client' no existe como tal
     inlines = [AccountMethodAmountInline]
-    
+
     def get_currency(self, obj):
         inline = obj.account_method_amounts.first()  # Obtenemos el primer AccountMethodAmount
         return inline.currency if inline else "No Currency"

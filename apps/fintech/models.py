@@ -155,7 +155,6 @@ class AccountMethodAmount(models.Model):
 
 class Role(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    group = models.OneToOneField(Group, on_delete=models.CASCADE)
     is_staff_role = models.BooleanField(default=False)  
 
     def __str__(self):

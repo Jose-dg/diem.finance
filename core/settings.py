@@ -102,12 +102,12 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 # DATABASES = {
 #     "default": env.db("DATABASE_URL"),
@@ -115,16 +115,16 @@ DATABASES = {
 
 # DATABASES["default"]["ATOMIC_REQUESTS"] = True
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME':                                     'fintech',
-#         'USER': 'postgres',
-#         'PASSWORD':                                 '7508',
-#         'HOST': 'localhost',  # Change if your database is hosted elsewhere
-#         'PORT': '5432',  # Default PostgreSQL port
-#     }
-# }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME':                                     'finance',
+        'USER': 'postgres',
+        'PASSWORD':                                 '7508',
+        'HOST': 'localhost',  # Change if your database is hosted elsewhere
+        'PORT': '5432',  # Default PostgreSQL port
+    }
+}
 
 CORS_ALLOW_ALL_ORIGINS = True
 
