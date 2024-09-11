@@ -34,15 +34,15 @@ def adjust_credit_on_delete(sender, instance, **kwargs):
 @receiver(post_save, sender=Credit)
 def create_transaction_on_credit_creation(sender, instance, created, **kwargs):
     """
-    Crea una transacción de tipo 'income' cuando se crea un nuevo crédito.
+    Crea una transacción de tipo 'expense' cuando se crea un nuevo crédito.
     """
     if created:
         Transaction.objects.create(
-            transaction_type='income',
+            transaction_type='expense',
             user=instance.user,
             category=instance.subcategory,
             date=instance.created_at,
-            description=f"Crédito creado con monto de {instance.price}",
+            description=f"Crédito creado por valor de ${instance.price}.00",
         )
 
 @receiver(post_save, sender=AccountMethodAmount)
