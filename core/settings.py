@@ -109,22 +109,22 @@ WSGI_APPLICATION = 'core.wsgi.application'
 #     }
 # }
 
-# DATABASES = {
-#     "default": env.db("DATABASE_URL"),
-# }
-
-# DATABASES["default"]["ATOMIC_REQUESTS"] = True
-
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME':                                     'finance',
-        'USER': 'postgres',
-        'PASSWORD':                                 '7508',
-        'HOST': 'localhost',  # Change if your database is hosted elsewhere
-        'PORT': '5432',  # Default PostgreSQL port
-    }
+    "default": env.db("DATABASE_URL"),
 }
+
+DATABASES["default"]["ATOMIC_REQUESTS"] = True
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME':                                     'finance',
+#         'USER': 'postgres',
+#         'PASSWORD':                                 '7508',
+#         'HOST': 'localhost',  # Change if your database is hosted elsewhere
+#         'PORT': '5432',  # Default PostgreSQL port
+#     }
+# }
 
 CORS_ALLOW_ALL_ORIGINS = True
 
