@@ -1,45 +1,86 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
-from .models import Transaction, AccountMethodAmount
+from .models import Transaction, AccountMethodAmount, Credit
+from datetime import date, timedelta
+from decimal import Decimal
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
-    if instance.pk:  # Actualización de una transacción existente
+    """
+    Ajusta el total de abonos cuando se actualiza un AccountMethodAmount.
+    """
+    if instance.pk:
         previous = AccountMethodAmount.objects.get(pk=instance.pk)
         if previous.amount_paid != instance.amount_paid:
             difference = instance.amount_paid - previous.amount_paid
             instance.credit.update_total_abonos(difference)
 
 @receiver(post_save, sender=AccountMethodAmount)
-def update_credit_pending_amount_on_create(sender, instance, created, **kwargs):
-    if created:  # Nueva transacción
+def update_credit_on_create(sender, instance, created, **kwargs):
+    """
+    Actualiza el total de abonos y el saldo pendiente cuando se crea un nuevo AccountMethodAmount.
+    """
+    if created:
         instance.credit.update_total_abonos(instance.amount_paid)
-    instance.credit.save()
 
 @receiver(post_delete, sender=AccountMethodAmount)
 def adjust_credit_on_delete(sender, instance, **kwargs):
+    """
+    Ajusta el total de abonos cuando se elimina un AccountMethodAmount.
+    """
     if instance.credit:
         instance.credit.update_total_abonos(-instance.amount_paid)
-        instance.credit.save()
+
+@receiver(post_save, sender=Credit)
+def create_transaction_on_credit_creation(sender, instance, created, **kwargs):
+    """
+    Crea una transacción de tipo 'income' cuando se crea un nuevo crédito.
+    """
+    if created:
+        Transaction.objects.create(
+            transaction_type='income',
+            user=instance.user,
+            category=instance.subcategory,
+            date=instance.created_at,
+            description=f"Crédito creado con monto de {instance.price}",
+        )
 
 @receiver(post_save, sender=AccountMethodAmount)
-def update_account_balance_on_create(sender, instance, created, **kwargs):
-    if created:  # Nueva transacción
-        instance.payment_method.balance += instance.amount_paid
-        instance.payment_method.save()
+def check_if_payment_is_due(sender, instance, **kwargs):
+    """
+    Verifica si el cliente ha incumplido pagos y ajusta el nivel de morosidad.
+    """
+    credit = instance.credit
+    today = date.today()
 
-@receiver(pre_save, sender=AccountMethodAmount)
-def adjust_account_balance_on_update(sender, instance, **kwargs):
-    if instance.pk:  # Actualización de una transacción existente
-        previous = AccountMethodAmount.objects.get(pk=instance.pk)
-        if previous.amount_paid != instance.amount_paid:
-            difference = instance.amount_paid - previous.amount_paid
-            instance.payment_method.balance += difference
-            instance.payment_method.save()
+    # Calcular los días desde el primer pago
+    days_since_first_payment = (today - credit.first_date_payment).days
 
-@receiver(post_delete, sender=AccountMethodAmount)
-def adjust_account_balance_on_delete(sender, instance, **kwargs):
-    if instance.payment_method:
-        instance.payment_method.balance -= instance.amount_paid
-        instance.payment_method.save()
+    # Calcular cuántos pagos deberían haberse realizado hasta hoy
+    payments_due = days_since_first_payment // credit.periodicity.days if credit.periodicity else 0
 
+    # Total que debería haberse pagado hasta hoy
+    total_expected_payment = payments_due * credit.installment_value if credit.installment_value else 0
+
+    # Evaluar el estado de morosidad
+    if credit.total_abonos < total_expected_payment:
+        if credit.total_abonos > 0:
+            credit.morosidad_level = 'mild_default'
+            missed_periods = (total_expected_payment - credit.total_abonos) // credit.installment_value
+            if missed_periods >= 2:
+                credit.morosidad_level = 'recurrent_default'
+        else:
+            if days_since_first_payment > 2 * credit.periodicity.days:
+                credit.morosidad_level = 'critical_default'
+            else:
+                credit.morosidad_level = 'severe_default'
+        credit.is_in_default = True
+    else:
+        expected_payment_date = credit.first_date_payment + timedelta(days=payments_due * credit.periodicity.days)
+        if payments_due > 0 and today > expected_payment_date:
+            credit.morosidad_level = 'moderate_default'
+        else:
+            credit.morosidad_level = 'on_time'
+            credit.is_in_default = False
+
+    credit.save()

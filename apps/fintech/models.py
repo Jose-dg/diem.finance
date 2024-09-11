@@ -3,9 +3,12 @@ from django.db import models
 import uuid
 from django.contrib.auth import get_user_model  
 from decimal import ROUND_HALF_UP, Decimal
-from datetime import datetime
 import math
 from django.db import transaction as db_transaction
+from django.db import models, transaction as db_transaction
+from django.utils import timezone
+import uuid
+import math
 
 class Country(models.Model):
     name = models.CharField(max_length=100)
@@ -150,7 +153,6 @@ class AccountMethodAmount(models.Model):
     def __str__(self):
         return f"Payment method {self.payment_method.name} - Amount Paid: {self.amount_paid}"
 
-
 class Role(models.Model):
     name = models.CharField(max_length=100, unique=True)
     group = models.OneToOneField(Group, on_delete=models.CASCADE)
@@ -193,11 +195,9 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
-
 class Credit(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
-    # Estados de orden, también puede quedarse como choices
     ORDER_STATES = (
         ('checking', 'Checking'),
         ('pending', 'Pending'),
@@ -206,33 +206,31 @@ class Credit(models.Model):
         ('preorder', 'Preorder')
     )
 
-    # Aquí ahora referenciamos el modelo User en lugar de get_user_model()
     registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='credits_registered')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credits')
+    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='credits')
 
     state = models.CharField(max_length=15, choices=ORDER_STATES, default='pending')
-    subcategory = models.ForeignKey(SubCategory, null=True, blank=True, on_delete=models.SET_NULL)
+    subcategory = models.ForeignKey('SubCategory', null=True, blank=True, on_delete=models.SET_NULL)
     cost = models.DecimalField(max_digits=12, decimal_places=2)
     price = models.DecimalField(max_digits=12, decimal_places=2)
-    currency = models.ForeignKey(Currency, null=True, blank=False, on_delete=models.SET_NULL)
+    currency = models.ForeignKey('Currency', null=True, blank=False, on_delete=models.SET_NULL)
     earnings = models.DecimalField(max_digits=12, decimal_places=2, editable=False, null=True, blank=True, default=0.00)
     first_date_payment = models.DateField()
     second_date_payment = models.DateField()
     credit_days = models.IntegerField()
     description = models.TextField(null=True, blank=True)
     interest = models.DecimalField(max_digits=5, decimal_places=2, editable=True, null=True, blank=True, default=0.00)
-    periodicity = models.ForeignKey(Periodicity, null=True, blank=True, on_delete=models.SET_NULL)
-    payment = models.ForeignKey(Account, null=True, blank=True, on_delete=models.SET_NULL, related_name='credit_payments')
+    periodicity = models.ForeignKey('Periodicity', null=True, blank=True, on_delete=models.SET_NULL)
+    payment = models.ForeignKey('Account', null=True, blank=True, on_delete=models.SET_NULL, related_name='credit_payments')
     refinancing = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     total_abonos = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     pending_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     installment_number = models.IntegerField(null=True, blank=True)
     installment_value = models.DecimalField(max_digits=12, null=True, blank=True, decimal_places=2)
     is_in_default = models.BooleanField(default=False)
-    created_at = models.DateTimeField(default=datetime.now)
+    created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Manejo de morosidad
     morosidad_level = models.CharField(max_length=20, choices=[
         ('on_time', 'On Time'),
         ('mild_default', 'Mild Default'),
@@ -245,7 +243,25 @@ class Credit(models.Model):
     def __str__(self):
         return f"{self.user} - {self.subcategory}: Credit:{self.price}, pending:{self.pending_amount}"
 
+    def update_total_abonos(self, amount_paid_difference):
+        """
+        Actualiza el total de abonos realizados al crédito y recalcula el saldo pendiente.
+        """
+        self.total_abonos += Decimal(amount_paid_difference)
+        self.update_pending_amount()
+
+    def update_pending_amount(self):
+        """
+        Recalcula el saldo pendiente del crédito basado en el total de abonos.
+        """
+        self.pending_amount = self.price - self.total_abonos
+        self.save()
+
     def save(self, *args, **kwargs):
+        """
+        Custom save method to initialize pending_amount and calculate interest, earnings,
+        installment_number, and installment_value.
+        """
         with db_transaction.atomic():
             is_new = self.pk is None
             cost = Decimal(self.cost)
@@ -255,7 +271,9 @@ class Credit(models.Model):
 
             if is_new:
                 self.pending_amount = self.price
+
             self.earnings = price - cost
+
             if cost and price and credit_days:
                 self.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
 
@@ -268,7 +286,6 @@ class Credit(models.Model):
 
             super(Credit, self).save(*args, **kwargs)
 
-
 class Transaction(models.Model):
     TRANSACTION_TYPES = [
         ('income', 'Income'),
@@ -276,24 +293,11 @@ class Transaction(models.Model):
     ]
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     transaction_type = models.CharField(max_length=50, choices=TRANSACTION_TYPES)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='transactions')
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='transactions')
-    credit = models.ForeignKey(Credit, on_delete=models.SET_NULL, null=True, related_name='transactions')
-    date = models.DateTimeField(default=datetime.now)
+    category = models.ForeignKey('SubCategory', on_delete=models.SET_NULL, null=True, related_name='transactions')
+    user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='transactions')
+    date = models.DateTimeField(default=timezone.now)
     description = models.TextField(null=True, blank=True)
  
-    def save(self, *args, **kwargs):
-        with db_transaction.atomic():
-            super(Transaction, self).save(*args, **kwargs)  # Guarda la transacción primero
-
-            # Si la transacción es un abono (income) y está asociada a un crédito
-            if self.transaction_type == 'income' and self.credit:
-                inline_abono = self.account_method_amounts.first()  # Obtenemos el inline recién agregado
-                if inline_abono:
-                    self.credit.update_pending_amount(inline_abono.amount_paid)  # Actualiza el saldo pendiente en el crédito
-                    self.credit.save()  # Guarda el crédito actualizado
-
-
 class Expense(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='expenses')
