@@ -299,7 +299,7 @@ class Transaction(models.Model):
  
 class Expense(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='expenses')
+    category = models.ForeignKey(SubCategory, on_delete=models.SET_NULL, null=True, related_name='expenses')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='expenses')
     registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='expenses')
