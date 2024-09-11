@@ -1,4 +1,5 @@
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 from .models import AccountMethodAmount, DocumentType, Label, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
 
 
@@ -29,7 +30,7 @@ class AddressInline(admin.TabularInline):
     extra = 1  # Número de direcciones extra para añadir por defecto
 
 @admin.register(Address)
-class AddressAdmin(admin.ModelAdmin):
+class AddressAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('user', 'address_type', 'address', 'city', 'country')
     search_fields = ('user__username', 'address', 'city', 'country__name')
 
@@ -50,7 +51,7 @@ class DocumentAdmin(admin.ModelAdmin):
     search_fields = ('code', 'description')
 
 @admin.register(CategoryType)
-class CategoryAdmin(admin.ModelAdmin):
+class CategoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('name', 'description')
     search_fields = ('name', )
 
@@ -69,7 +70,7 @@ class AccountAdmin(admin.ModelAdmin):
     list_display = ('name', 'account_number', 'currency', 'balance')
     search_fields = ('name', 'account_number', 'currency')
 
-@admin.register(Label)
+@admin.register(ImportExportModelAdmin, Label)
 class LabelAdmin(admin.ModelAdmin):
     list_display = ('name', 'position')
     search_fields = ('name', 'position')
@@ -120,7 +121,7 @@ class AccountMethodAmountInline(admin.TabularInline):
     extra = 1
 
 @admin.register(Transaction)
-class TransactionAdmin(admin.ModelAdmin):
+class TransactionAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
     search_fields = ('transaction_type', 'category__name', 'user__username')  # Cambié 'client__name' por 'user__username' porque 'client' no existe como tal
     inlines = [AccountMethodAmountInline]
@@ -148,7 +149,7 @@ class TransactionAdmin(admin.ModelAdmin):
 
 
 @admin.register(Credit)
-class CreditAdmin(admin.ModelAdmin):
+class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = (
         'uid', 'state', 'morosidad_level', 'user', 'cost', 'price', 
         'credit_days', 'earnings', 'interest', 'periodicity', 'total_abonos','pending_amount', 
@@ -163,3 +164,8 @@ class CreditAdmin(admin.ModelAdmin):
             obj.registered_by = request.user
         super().save_model(request, obj, form, change)
 
+@admin.register(ParamsLocation)
+class ParamsLocationAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('city_name', 'state_name', 'country_name', 'city_code', 'state_code', 'country_code')
+    search_fields = ('city_name', 'state_name', 'country_name', 'city_code', 'state_code', 'country_code')
+     
