@@ -73,8 +73,8 @@ class LabelAdmin(ImportExportModelAdmin, admin.ModelAdmin):
   
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ('category', 'amount', 'account', 'date', 'registered_by')
-    search_fields = ('category__name', 'account__name', 'registered_by__username')
+    list_display = ('subcategory', 'amount', 'account', 'date', 'registered_by')
+    search_fields = ('account__name', 'registered_by__username')
 
 @admin.register(PhoneNumber)
 class PhoneNumberAdmin(admin.ModelAdmin):
