@@ -86,12 +86,12 @@ class PhoneNumberAdmin(admin.ModelAdmin):
     search_fields = ('country_code',) 
 
 @admin.register(Country)
-class CountryAdmin(admin.ModelAdmin):
+class CountryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('name', 'utc_offset')
     search_fields = ('name',)
 
 @admin.register(ParamsLocation)
-class CityAdmin(admin.ModelAdmin):
+class CityAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('city_name', 'state_name', 'country_name')
     search_fields = ('city_name', 'state_name', 'country_name')
 
