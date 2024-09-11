@@ -24,7 +24,6 @@ class UserAdmin(admin.ModelAdmin):
         return obj.phone_1.phone_number if obj.phone_1 else None
     get_phone_1.short_description = 'Phone 1'
     
-# Inline para manejar las direcciones directamente en el admin de usuarios
 class AddressInline(admin.TabularInline):
     model = Address
     extra = 1  # Número de direcciones extra para añadir por defecto
@@ -34,17 +33,14 @@ class AddressAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('user', 'address_type', 'address', 'city', 'country')
     search_fields = ('user__username', 'address', 'city', 'country__name')
 
-# Agregar el Inline de direcciones al admin de usuarios
 class UserAdminWithAddress(UserAdmin):
     inlines = [AddressInline]
 
-# Admin para el modelo Role
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
     list_display = ('name', 'is_staff_role')  # Muestra el nombre del rol y el grupo asociado
     search_fields = ('name', 'is_staff_role')  # Permite búsqueda por nombre del rol y del grupo
 
-# Registrar otros modelos sin cambios significativos
 @admin.register(DocumentType)
 class DocumentAdmin(admin.ModelAdmin):
     list_display = ('code', 'description')
@@ -89,11 +85,6 @@ class PhoneNumberAdmin(admin.ModelAdmin):
 class CountryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('name', 'utc_offset')
     search_fields = ('name',)
-
-@admin.register(ParamsLocation)
-class CityAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('city_name', 'state_name', 'country_name')
-    search_fields = ('city_name', 'state_name', 'country_name')
 
 @admin.register(Identifier)
 class IdAdmin(admin.ModelAdmin):
