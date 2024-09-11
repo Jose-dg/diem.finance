@@ -70,8 +70,8 @@ class AccountAdmin(admin.ModelAdmin):
     list_display = ('name', 'account_number', 'currency', 'balance')
     search_fields = ('name', 'account_number', 'currency')
 
-@admin.register(ImportExportModelAdmin, Label)
-class LabelAdmin(admin.ModelAdmin):
+@admin.register(Label)
+class LabelAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('name', 'position')
     search_fields = ('name', 'position')
   
