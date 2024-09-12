@@ -61,7 +61,11 @@ def adjust_credit_on_delete(sender, instance, **kwargs):
 #             transaction=transaction
 #         )
 
+@receiver(post_save, sender=Credit)
 def create_transaction_and_account_method(sender, instance, created, **kwargs):
+    """
+    Crea una transacción de tipo 'expense' cuando se crea un nuevo crédito y un registro asociado en AccountMethodAmount.
+    """
     if created:
         # Crear la transacción de crédito
         transaction = Transaction.objects.create(
@@ -72,18 +76,16 @@ def create_transaction_and_account_method(sender, instance, created, **kwargs):
             description=f"Crédito de ${instance.price}.00 registrado.",
         )
 
-        # Asegurarse de que la transacción está correctamente guardada antes de usarla
-        if transaction:
-            # Crear AccountMethodAmount asociado a la transacción
-            AccountMethodAmount.objects.create(
-                payment_method=instance.payment,  # Método de pago relacionado al crédito
-                payment_code=f"{transaction.uid}-credit",  # Código único
-                amount=instance.price,  # Monto total del crédito (lo que se entrega)
-                amount_paid=instance.price,  # El monto entregado al cliente es igual al amount
-                currency=instance.currency,
-                credit=instance,
-                transaction=transaction  # Asignar la transacción creada
-            )
+        # Crear AccountMethodAmount asociado a la transacción
+        AccountMethodAmount.objects.create(
+            payment_method=instance.payment,  # Método de pago relacionado al crédito
+            payment_code=f"{transaction.uid}-credit",  # Código único
+            amount=instance.price,  # Monto total del crédito (lo que se entrega)
+            amount_paid=instance.price,  # El monto entregado al cliente es igual al amount
+            currency=instance.currency,
+            credit=instance,
+            transaction=transaction  # Asignar la transacción creada
+        )
 
 @receiver(post_save, sender=AccountMethodAmount)
 def check_if_payment_is_due(sender, instance, **kwargs):
