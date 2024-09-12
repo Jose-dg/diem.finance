@@ -1,7 +1,7 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 from .models import Expense, Transaction, AccountMethodAmount, Credit
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
@@ -76,10 +76,14 @@ def create_transaction_and_account_method(sender, instance, created, **kwargs):
             description=f"Crédito de ${instance.price}.00 registrado.",
         )
 
+        # Formatear la fecha y hora para el payment_code
+        current_datetime = datetime.now()
+        payment_code = current_datetime.strftime("%d%m%Y%H%M")  # Formato DDMMYYYYHHMM
+
         # Crear AccountMethodAmount asociado a la transacción
         AccountMethodAmount.objects.create(
             payment_method=instance.payment,  # Método de pago relacionado al crédito
-            payment_code=f"{transaction.uid}-credit",  # Código único
+            payment_code=f"CP{payment_code}",  # Código único
             amount=instance.price,  # Monto total del crédito (lo que se entrega)
             amount_paid=instance.price,  # El monto entregado al cliente es igual al amount
             currency=instance.currency,
