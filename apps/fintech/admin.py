@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
-from .models import AccountMethodAmount, DocumentType, Label, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
+from .models import AccountMethodAmount, DocumentType, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
 
 
 @admin.register(User)
@@ -159,4 +159,12 @@ class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 class ParamsLocationAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('city_name', 'state_name', 'country_name', 'city_code', 'state_code', 'country_code')
     search_fields = ('city_name', 'state_name', 'country_name', 'city_code', 'state_code', 'country_code')
-     
+
+@admin.register(Seller)
+class SellerAdmin(admin.ModelAdmin):
+    list_display = ('user', 'total_sales', 'commissions', 'returns')
+    search_fields = ('user__username',)
+
+    def get_user(self, obj):
+        return obj.user.username
+    get_user.short_description = 'Seller Username'

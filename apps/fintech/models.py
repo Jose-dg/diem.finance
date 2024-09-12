@@ -159,7 +159,17 @@ class Role(models.Model):
 
     def __str__(self):
         return self.name
-        
+
+class Seller(models.Model):
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='sellers')
+    user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE, related_name='seller_profile')
+    total_sales = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    commissions = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    returns = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"Seller: {self.user}"
+       
 class User(AbstractUser):
     id_user = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     document = models.ForeignKey(Identifier, null=True, blank=True, on_delete=models.SET_NULL)
@@ -194,6 +204,7 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+
 class Credit(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
@@ -206,6 +217,7 @@ class Credit(models.Model):
     )
 
     registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='credits_registered')
+    seller = models.ForeignKey(Seller, on_delete=models.SET_NULL, null=True, blank=True, related_name='credits_made') 
     user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='credits')
 
     state = models.CharField(max_length=15, choices=ORDER_STATES, default='pending')

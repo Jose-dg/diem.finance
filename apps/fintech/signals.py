@@ -1,6 +1,6 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
-from .models import Transaction, AccountMethodAmount, Credit
+from .models import Expense, Transaction, AccountMethodAmount, Credit
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -84,3 +84,24 @@ def check_if_payment_is_due(sender, instance, **kwargs):
             credit.is_in_default = False
 
     credit.save()
+
+@receiver(post_save, sender=Expense)
+def create_transaction_and_update_account(sender, instance, created, **kwargs):
+    if created:
+        # Crear la transacción del gasto
+        transaction = Transaction.objects.create(
+            transaction_type='expense',
+            user=instance.registered_by,  # Quién hizo el gasto
+            category=instance.subcategory,
+            date=instance.date,
+            description=f"Gasto registrado por ${instance.amount}.00",
+        )
+        # Actualizar AccountMethodAmount con el gasto
+        AccountMethodAmount.objects.create(
+            payment_method=instance.account,  # Cuenta desde donde se pagó
+            payment_code=f"{transaction.uid}-expense",  # Código único
+            amount=instance.amount,
+            amount_paid=instance.amount,  # El monto total se refleja en el gasto
+            currency=instance.account.currency,
+            transaction=transaction
+        )
