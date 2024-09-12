@@ -15,13 +15,20 @@ def adjust_credit_on_update(sender, instance, **kwargs):
             difference = instance.amount_paid - previous.amount_paid
             instance.credit.update_total_abonos(difference)
 
+# @receiver(post_save, sender=AccountMethodAmount)
+# def update_credit_on_create(sender, instance, created, **kwargs):
+#     """
+#     Actualiza el total de abonos y el saldo pendiente cuando se crea un nuevo AccountMethodAmount.
+#     """
+#     if created:
+#         instance.credit.update_total_abonos(instance.amount_paid)
+
 @receiver(post_save, sender=AccountMethodAmount)
-def update_credit_on_create(sender, instance, created, **kwargs):
-    """
-    Actualiza el total de abonos y el saldo pendiente cuando se crea un nuevo AccountMethodAmount.
-    """
-    if created:
+def update_credit_on_account_method_change(sender, instance, **kwargs):
+    # Solo actualizamos el crédito si la transacción es de tipo 'income'
+    if instance.transaction.transaction_type == 'income':
         instance.credit.update_total_abonos(instance.amount_paid)
+
 
 @receiver(post_delete, sender=AccountMethodAmount)
 def adjust_credit_on_delete(sender, instance, **kwargs):
