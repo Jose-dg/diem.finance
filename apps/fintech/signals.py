@@ -2,7 +2,6 @@ from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 from .models import Expense, Transaction, AccountMethodAmount, Credit
 from datetime import date, timedelta
-from decimal import Decimal
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
@@ -38,19 +37,53 @@ def adjust_credit_on_delete(sender, instance, **kwargs):
     if instance.credit:
         instance.credit.update_total_abonos(-instance.amount_paid)
 
-@receiver(post_save, sender=Credit)
-def create_transaction_on_credit_creation(sender, instance, created, **kwargs):
-    """
-    Crea una transacción de tipo 'expense' cuando se crea un nuevo crédito.
-    """
+# @receiver(post_save, sender=Credit)
+# def create_transaction_on_credit_creation(sender, instance, created, **kwargs):
+#     """
+#     Crea una transacción de tipo 'expense' cuando se crea un nuevo crédito.
+#     """
+#     if created:
+#         Transaction.objects.create(
+#             transaction_type='expense',
+#             user=instance.user,
+#             category=instance.subcategory,
+#             date=instance.created_at,
+#             description=f"Crédito creado por valor de ${instance.price}.00",
+#         )
+#             # Crear AccountMethodAmount asociado a la transacción del crédito
+#         AccountMethodAmount.objects.create(
+#             payment_method=instance.payment,  # Método de pago relacionado al crédito
+#             payment_code=f"{transaction.uid}-credit",  # Código único
+#             amount=instance.price,  # Monto total del crédito (lo que se entrega)
+#             amount_paid=instance.price,  # El monto entregado al cliente es igual al amount
+#             currency=instance.currency,
+#             credit=instance,
+#             transaction=transaction
+#         )
+
+def create_transaction_and_account_method(sender, instance, created, **kwargs):
     if created:
-        Transaction.objects.create(
+        # Crear la transacción de crédito
+        transaction = Transaction.objects.create(
             transaction_type='expense',
             user=instance.user,
             category=instance.subcategory,
             date=instance.created_at,
-            description=f"Crédito creado por valor de ${instance.price}.00",
+            description=f"Crédito de ${instance.price}.00 registrado.",
         )
+
+        # Asegurarse de que la transacción está correctamente guardada antes de usarla
+        if transaction:
+            # Crear AccountMethodAmount asociado a la transacción
+            AccountMethodAmount.objects.create(
+                payment_method=instance.payment,  # Método de pago relacionado al crédito
+                payment_code=f"{transaction.uid}-credit",  # Código único
+                amount=instance.price,  # Monto total del crédito (lo que se entrega)
+                amount_paid=instance.price,  # El monto entregado al cliente es igual al amount
+                currency=instance.currency,
+                credit=instance,
+                transaction=transaction  # Asignar la transacción creada
+            )
 
 @receiver(post_save, sender=AccountMethodAmount)
 def check_if_payment_is_due(sender, instance, **kwargs):
