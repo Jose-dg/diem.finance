@@ -9,20 +9,29 @@ class PhoneNumberSerializer(serializers.ModelSerializer):
         model = PhoneNumber
         fields = ['country_code', 'phone_number']
 
+class SubCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubCategory
+        fields = ['name']  # Solo devuelve el nombre
+
+class LabelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Label
+        fields = ['name', 'position'] 
+
 class UserSerializer(serializers.ModelSerializer):
 
     phone_1 = PhoneNumberSerializer() 
+    label = LabelSerializer() 
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone_1']  
-
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone_1', 'label']  
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = ['id_payment_method', 'name', 'account_number', 'balance', 'currency']
-
 
 class AccountMethodAmountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -40,11 +49,12 @@ class TransactionSerializer(serializers.ModelSerializer):
 class CreditSerializer(serializers.ModelSerializer):
     user = UserSerializer()  # Relación con el modelo User
     payments = AccountMethodAmountSerializer(many=True, read_only=True)  # Lista de pagos relacionados con el crédito
+    subcategory = SubCategorySerializer() 
 
     class Meta:
         model = Credit
         fields = [
-            'uid', 'user', 'cost', 'price', 'currency', 'total_abonos', 'pending_amount', 
+            'uid', 'user', 'state', 'subcategory', 'cost', 'installment_number', 'installment_value', 'price', 'currency', 'total_abonos', 'pending_amount', 
             'first_date_payment', 'second_date_payment', 'credit_days', 'payments'
         ]
 
@@ -64,7 +74,7 @@ class CreditDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Credit
         fields = [
-            'uid', 'state', 'credit_type', 'cost', 'price', 'earnings',
+            'uid', 'state', 'subcategory', 'cost', 'price', 'earnings',
             'first_date_payment', 'second_date_payment', 'credit_days',
             'description', 'interest', 'refinancing', 'total_abonos',
             'pending_amount', 'installment_number', 'installment_value',

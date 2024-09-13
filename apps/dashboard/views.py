@@ -228,7 +228,7 @@ class ProductCreditsAPIView(APIView):
             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Filtrar los créditos de productos en el período
-        credits = Credit.objects.filter(credit_type='personal', created_at__range=[start_date, end_date])
+        credits = Credit.objects.filter(subcategory='personal', created_at__range=[start_date, end_date])
 
         # Usamos el CreditSerializer para serializar todos los datos
         serializer = CreditSerializer(credits, many=True)
@@ -273,7 +273,7 @@ class FinancialCreditsAPIView(APIView):
             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Filtrar los créditos financieros en el período
-        credits = Credit.objects.filter(credit_type='financial_product', created_at__range=[start_date, end_date])
+        credits = Credit.objects.filter(subcategory='financial_product', created_at__range=[start_date, end_date])
 
         # Instanciar el paginador
         paginator = CustomOrderPagination()
