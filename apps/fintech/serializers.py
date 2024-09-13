@@ -71,7 +71,6 @@ class CreditDetailSerializer(serializers.ModelSerializer):
             'is_in_default', 'created_at', 'updated_at', 'morosidad_level',
             'category', 'user', 'currency', 'periodicity', 'payment', 'registered_by'
         ]
-        # fields = ['uid', 'credit_type', 'client_name', 'price', 'first_date_payment', 'total_abonos', 'pending_amount', 'abonos']
 
     def get_abonos(self, obj):
         # Verificar si el crédito tiene pagos asociados

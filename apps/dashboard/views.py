@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from django.utils import timezone  # Importar timezone para hacer las fechas aware
 from apps.fintech.pagination import CustomOrderPagination
 from apps.fintech.serializers import CreditDetailSerializer, CreditSerializer, TransactionSerializer
-from apps.fintech.models import Client, Credit, Transaction, Expense, AccountMethodAmount
+from apps.fintech.models import User, Credit, Transaction, Expense, AccountMethodAmount
 from django.utils.dateparse import parse_date
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -154,7 +154,7 @@ class NewCreditsAPIView(APIView):
 
         # DEBUG: Verificar si los datos del cliente están correctos
         for credit in credits:
-            print(credit.client)  
+            print(credit.user)  
             
         # Instanciar el paginador
         paginator = CustomOrderPagination()
@@ -212,7 +212,7 @@ class ClientsWithDefaultAPIView(APIView):
     def post(self, request, *args, **kwargs):
         credits = Credit.objects.filter(
             morosidad_level__in=['mild_default', 'moderate_default', 'severe_default', 'recurrent_default', 'critical_default']
-        ).distinct('client')
+        ).distinct('user')
 
         # Usamos el CreditSerializer para serializar todos los datos
         serializer = CreditSerializer(credits, many=True)
@@ -251,8 +251,8 @@ class CreditDetailAPIView(APIView):
         print(f"Crédito encontrado: {credit}")
 
         # Obtener el cliente asociado al crédito
-        client = credit.client
-        print(f"Cliente asociado: {client}")
+        user = credit.user
+        print(f"Cliente asociado: {user}")
 
         # Serializar los detalles del crédito y sus abonos
         serializer = CreditDetailSerializer(credit)
