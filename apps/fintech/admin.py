@@ -142,7 +142,7 @@ class TransactionAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 @admin.register(Credit)
 class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = (
-        'uid', 'state', 'morosidad_level', 'user', 'cost', 'price', 
+        'uid', 'state', 'description', 'morosidad_level', 'user', 'cost', 'price', 
         'credit_days', 'earnings', 'interest', 'periodicity', 'total_abonos','pending_amount', 
         'installment_number', 'installment_value'
     )
