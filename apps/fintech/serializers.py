@@ -55,7 +55,7 @@ class CreditSerializer(serializers.ModelSerializer):
         model = Credit
         fields = [
             'uid', 'user', 'state', 'subcategory', 'cost', 'installment_number', 'installment_value', 'price', 'currency', 'total_abonos', 'pending_amount', 
-            'first_date_payment', 'second_date_payment', 'credit_days', 'payments'
+            'first_date_payment', 'second_date_payment', 'credit_days', 'payments', 'description'
         ]
 
     def update(self, instance, validated_data):
