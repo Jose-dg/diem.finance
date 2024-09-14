@@ -54,7 +54,7 @@ class CreditSerializer(serializers.ModelSerializer):
     class Meta:
         model = Credit
         fields = [
-            'uid', 'user', 'state', 'subcategory', 'cost', 'installment_number', 'installment_value', 'price', 'currency', 'total_abonos', 'pending_amount', 
+            'created_at', 'uid', 'user', 'state', 'subcategory', 'cost', 'installment_number', 'installment_value', 'price', 'currency', 'total_abonos', 'pending_amount', 
             'first_date_payment', 'second_date_payment', 'credit_days', 'payments', 'description'
         ]
 
