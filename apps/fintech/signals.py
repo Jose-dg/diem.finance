@@ -14,17 +14,11 @@ def adjust_credit_on_update(sender, instance, **kwargs):
             difference = instance.amount_paid - previous.amount_paid
             instance.credit.update_total_abonos(difference)
 
-# @receiver(post_save, sender=AccountMethodAmount)
-# def update_credit_on_create(sender, instance, created, **kwargs):
-#     """
-#     Actualiza el total de abonos y el saldo pendiente cuando se crea un nuevo AccountMethodAmount.
-#     """
-#     if created:
-#         instance.credit.update_total_abonos(instance.amount_paid)
-
 @receiver(post_save, sender=AccountMethodAmount)
 def update_credit_on_account_method_change(sender, instance, **kwargs):
-    # Solo actualizamos el crédito si la transacción es de tipo 'income'
+    """
+    Solo actualizamos el crédito si la transacción es de tipo 'income'
+    """
     if instance.transaction.transaction_type == 'income':
         instance.credit.update_total_abonos(instance.amount_paid)
 
@@ -36,30 +30,6 @@ def adjust_credit_on_delete(sender, instance, **kwargs):
     """
     if instance.credit:
         instance.credit.update_total_abonos(-instance.amount_paid)
-
-# @receiver(post_save, sender=Credit)
-# def create_transaction_on_credit_creation(sender, instance, created, **kwargs):
-#     """
-#     Crea una transacción de tipo 'expense' cuando se crea un nuevo crédito.
-#     """
-#     if created:
-#         Transaction.objects.create(
-#             transaction_type='expense',
-#             user=instance.user,
-#             category=instance.subcategory,
-#             date=instance.created_at,
-#             description=f"Crédito creado por valor de ${instance.price}.00",
-#         )
-#             # Crear AccountMethodAmount asociado a la transacción del crédito
-#         AccountMethodAmount.objects.create(
-#             payment_method=instance.payment,  # Método de pago relacionado al crédito
-#             payment_code=f"{transaction.uid}-credit",  # Código único
-#             amount=instance.price,  # Monto total del crédito (lo que se entrega)
-#             amount_paid=instance.price,  # El monto entregado al cliente es igual al amount
-#             currency=instance.currency,
-#             credit=instance,
-#             transaction=transaction
-#         )
 
 @receiver(post_save, sender=Credit)
 def create_transaction_and_account_method(sender, instance, created, **kwargs):
@@ -130,24 +100,3 @@ def check_if_payment_is_due(sender, instance, **kwargs):
             credit.is_in_default = False
 
     credit.save()
-
-@receiver(post_save, sender=Expense)
-def create_transaction_and_update_account(sender, instance, created, **kwargs):
-    if created:
-        # Crear la transacción del gasto
-        transaction = Transaction.objects.create(
-            transaction_type='expense',
-            user=instance.registered_by,  # Quién hizo el gasto
-            category=instance.subcategory,
-            date=instance.date,
-            description=f"Gasto registrado por ${instance.amount}.00",
-        )
-        # Actualizar AccountMethodAmount con el gasto
-        AccountMethodAmount.objects.create(
-            payment_method=instance.account,  # Cuenta desde donde se pagó
-            payment_code=f"{transaction.uid}-expense",  # Código único
-            amount=instance.amount,
-            amount_paid=instance.amount,  # El monto total se refleja en el gasto
-            currency=instance.account.currency,
-            transaction=transaction
-        )
