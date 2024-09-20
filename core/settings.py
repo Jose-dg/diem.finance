@@ -196,21 +196,21 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# REST_FRAMEWORK = {
-#     'DEFAULT_PERMISSION_CLASSES': (
-#         'rest_framework.permissions.AllowAny',
-#     )
-# }
-
 REST_FRAMEWORK = {
- 'DEFAULT_AUTHENTICATION_CLASSES': (
-    'oauth2_provider.contrib.rest_framework.OAuth2Authentication', 
-    'rest_framework_simplejwt.authentication.JWTAuthentication',
- ),
-     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny',
+    )
 }
+
+# REST_FRAMEWORK = {
+#  'DEFAULT_AUTHENTICATION_CLASSES': (
+#     'oauth2_provider.contrib.rest_framework.OAuth2Authentication', 
+#     'rest_framework_simplejwt.authentication.JWTAuthentication',
+#  ),
+#      'DEFAULT_PERMISSION_CLASSES': (
+#         'rest_framework.permissions.IsAuthenticated',
+#     ),
+# }
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',
