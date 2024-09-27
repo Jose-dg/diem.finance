@@ -315,7 +315,7 @@ class Expense(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='expenses')
     registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='expenses')
-    user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE, related_name='expense_made_by')
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='expense_made_by')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True) 
 
