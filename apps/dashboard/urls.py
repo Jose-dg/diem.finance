@@ -8,7 +8,7 @@ from .views import (
    ClientsWithDefaultAPIView, 
    FinancialCreditsAPIView, 
    ProductCreditsAPIView, 
-   FilteredDataView)
+   )
 
 urlpatterns = [
     path('finance/', FinanceView.as_view(), name='finance'),

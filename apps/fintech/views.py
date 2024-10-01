@@ -42,12 +42,6 @@ class CreditViewSet(viewsets.ModelViewSet):
     queryset = Credit.objects.all()
     serializer_class = CreditSerializer
 
-# class ExpenseViewSet(viewsets.ModelViewSet):
-#     queryset = Expense.objects.all()
-#     serializer_class = ExpenseSerializer
-
-
-
 
 # Vista para obtener resumen general
 class FinanceView(APIView):
