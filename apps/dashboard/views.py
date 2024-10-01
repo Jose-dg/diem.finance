@@ -6,7 +6,7 @@ from django.db.models import Sum
 from datetime import datetime, timedelta
 from django.utils import timezone  # Importar timezone para hacer las fechas aware
 from apps.fintech.pagination import CustomOrderPagination
-from apps.fintech.serializers import CreditDetailSerializer, CreditSerializer, TransactionSerializer
+from apps.fintech.serializers import CreditDetailSerializer, CreditSerializer, ExpenseSerializer, TransactionSerializer
 from apps.fintech.models import User, Credit, Transaction, Expense, AccountMethodAmount
 from django.utils.dateparse import parse_date
 from django.db.models import Q
@@ -264,6 +264,7 @@ class CreditDetailAPIView(APIView):
 # https://finance-fj03.onrender.com
 
 class FinancialCreditsAPIView(APIView):
+
     def post(self, request, *args, **kwargs):
         # Obtener las fechas del cuerpo
         start_date = parse_date(request.data.get('start_date'))

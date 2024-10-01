@@ -1,5 +1,14 @@
 from django.urls import path
-from .views import CreditDetailAPIView, FinanceView, NewCreditsAPIView, PendingCreditsAPIView, TransactionsAPIView, ClientsWithDefaultAPIView, FinancialCreditsAPIView, ProductCreditsAPIView
+from .views import (
+   CreditDetailAPIView, 
+   FinanceView, 
+   NewCreditsAPIView, 
+   PendingCreditsAPIView, 
+   TransactionsAPIView, 
+   ClientsWithDefaultAPIView, 
+   FinancialCreditsAPIView, 
+   ProductCreditsAPIView, 
+   FilteredDataView)
 
 urlpatterns = [
     path('finance/', FinanceView.as_view(), name='finance'),
