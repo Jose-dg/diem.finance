@@ -47,7 +47,7 @@ class AccountMethodAmountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AccountMethodAmount
-        fields = ['payment_method', 'amount', 'credit']
+        fields = ['payment_method', 'amount', 'credit', 'transaction_date']
 
 class TransactionSerializer(serializers.ModelSerializer):
     account = AccountSerializer()
