@@ -1,34 +1,23 @@
 from rest_framework import viewsets
-from .models import User, Category, Account, Transaction, Credit, Expense
+from .models import User, Account, Transaction, Credit, Expense
 from .serializers import (
-    UserSerializer,
-    AccountSerializer,
-    TransactionSerializer,
-    CreditSerializer
-)
-
-
-import uuid
+    UserSerializer, 
+    AccountSerializer, 
+    TransactionSerializer, 
+    CreditSerializer )
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Sum
 from datetime import datetime, timedelta
 from django.utils import timezone  
-from .pagination import CustomOrderPagination
-from .serializers import CreditDetailSerializer, CreditSerializer, TransactionSerializer
+from .serializers import CreditSerializer, TransactionSerializer
 from .models import User, Credit, Transaction, Expense, AccountMethodAmount
 from django.utils.dateparse import parse_date
-from django.db.models import Q
-from django.shortcuts import get_object_or_404
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-
-# class CategoryViewSet(viewsets.ModelViewSet):
-#     queryset = Category.objects.all()
-#     serializer_class = CategorySerializer
 
 class AccountViewSet(viewsets.ModelViewSet):
     queryset = Account.objects.all()
@@ -41,7 +30,6 @@ class TransactionViewSet(viewsets.ModelViewSet):
 class CreditViewSet(viewsets.ModelViewSet):
     queryset = Credit.objects.all()
     serializer_class = CreditSerializer
-
 
 # Vista para obtener resumen general
 class FinanceView(APIView):
@@ -170,123 +158,8 @@ class FinanceView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
-class CreditsAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        start_date = parse_date(request.data.get('start_date'))
-        end_date = parse_date(request.data.get('end_date'))
 
-        if not start_date or not end_date:
-            return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Filtrar los créditos creados en el período
-        credits = Credit.objects.filter(created_at__range=[start_date, end_date]).order_by('created_at')
-
-        # Instanciar el paginador
-        paginator = CustomOrderPagination()
-
-        # Aplicar paginación a los resultados
-        paginated_credits = paginator.paginate_queryset(credits, request)
-
-        # Serializar los créditos paginados
-        serializer = CreditSerializer(paginated_credits, many=True)
-
-        # Devolver los datos paginados
-        return paginator.get_paginated_response(serializer.data)
-
-class PendingCreditsAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        start_date = parse_date(request.data.get('start_date'))
-        end_date = parse_date(request.data.get('end_date'))
-
-        if not start_date or not end_date:
-            return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Filtrar los créditos con saldo pendiente en el período
-        credits = Credit.objects.filter(pending_amount__gt=0, created_at__range=[start_date, end_date])
-
-        # Instanciar el paginador
-        paginator = CustomOrderPagination()
-
-        # Aplicar paginación a los resultados
-        paginated_credits = paginator.paginate_queryset(credits, request)
-
-        # Serializar los créditos paginados
-        serializer = CreditSerializer(paginated_credits, many=True)
-
-        # Devolver los datos paginados
-        return paginator.get_paginated_response(serializer.data)
-
-# Vista para obtener transacciones en un período
-class TransactionsAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        start_date = parse_date(request.data.get('start_date'))
-        end_date = parse_date(request.data.get('end_date'))
-
-        if not start_date or not end_date:
-            return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Filtrar las transacciones en el período
-        transactions = Transaction.objects.filter(date__range=[start_date, end_date])
-
-        # Usamos el serializer para todos los datos
-        serializer = TransactionSerializer(transactions, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-# Vista para obtener clientes con morosidad
-class ClientsWithDefaultAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        credits = Credit.objects.filter(
-            morosidad_level__in=['mild_default', 'moderate_default', 'severe_default', 'recurrent_default', 'critical_default']
-        ).distinct('client')
-
-        # Usamos el CreditSerializer para serializar todos los datos
-        serializer = CreditSerializer(credits, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-# Vista para obtener créditos de productos en un período
-class ProductCreditsAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        start_date = parse_date(request.data.get('start_date'))
-        end_date = parse_date(request.data.get('end_date'))
-
-        if not start_date or not end_date:
-            return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Filtrar los créditos de productos en el período
-        credits = Credit.objects.filter(subcategory='personal', created_at__range=[start_date, end_date])
-
-        # Usamos el CreditSerializer para serializar todos los datos
-        serializer = CreditSerializer(credits, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-class CreditDetailAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        # Obtener el UUID del crédito desde el cuerpo de la solicitud
-        credit_uuid = request.data.get('credit_id')
-        print(f"Recibido credit_uuid desde el cuerpo: {credit_uuid}")  # Verificar que se recibe correctamente
-
-        # Verificar que el UUID es válido
-        try:
-            credit_uuid = uuid.UUID(credit_uuid)
-        except (ValueError, TypeError):
-            return Response({"error": "ID de crédito no válido o no proporcionado."}, status=status.HTTP_400_BAD_REQUEST)
-
-          # Consultar el crédito usando el UUID
-        credit = get_object_or_404(Credit, uid=credit_uuid)
-        print(f"Crédito encontrado: {credit}")
-
-        # Obtener el cliente asociado al crédito
-        client = credit.client
-        print(f"Cliente asociado: {client}")
-
-        # Serializar los detalles del crédito y sus abonos
-        serializer = CreditDetailSerializer(credit)
-        print(f"Datos serializados del crédito: {serializer.data}")
-
-        # Devolver los datos tal como están, en formato JSON crudo
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-class FinancialCreditsAPIView(APIView):
+   
     def post(self, request, *args, **kwargs):
         # Obtener las fechas del cuerpo
         start_date = parse_date(request.data.get('start_date'))
