@@ -58,7 +58,7 @@ class SubCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category_type', 'created_at', 'updated_at')
+    list_display = ('uid', 'name', 'category_type', 'created_at', 'updated_at')
     search_fields = ('name', 'category_type')
 
 @admin.register(Account)
