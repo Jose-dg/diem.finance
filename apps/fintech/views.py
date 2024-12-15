@@ -39,6 +39,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
 
     def create(self, request, *args, **kwargs):
+        print("Inicio del método create")  # Rastro inicial
+
         # Extraer datos del request
         credit_uid = request.data.get("credit_uid")
         amount = Decimal(request.data.get("amount"))
@@ -47,13 +49,22 @@ class TransactionViewSet(viewsets.ModelViewSet):
         category_id = request.data.get("category_id")
         payment_type = request.data.get("payment_type")
 
+        print(f"Datos recibidos del request: credit_uid={credit_uid}, amount={amount}, "
+              f"description={description}, user_id={user_id}, category_id={category_id}, "
+              f"payment_type={payment_type}")
+
         # Validar el crédito
         credit = get_object_or_404(Credit, uid=credit_uid)
+        print(f"Crédito encontrado: {credit.uid}, estado={credit.state}")
+
         if amount <= 0:
+            print("El monto ingresado es inválido (<= 0)")  # Depuración de error
             return Response(
                 {"detail": "El monto debe ser mayor a 0"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        print("El monto es válido, procediendo a crear la transacción")
 
         # Crear la transacción
         transaction = Transaction.objects.create(
@@ -63,21 +74,35 @@ class TransactionViewSet(viewsets.ModelViewSet):
             category_id=category_id,
         )
 
+        print(f"Transacción creada: ID={transaction.id}, tipo={transaction.transaction_type}")
+
         # Crear el abono (AccountMethodAmount)
-        AccountMethodAmount.objects.create(
-            payment_method=credit.payment,
-            payment_code=str(uuid.uuid4()),
-            amount=amount,
-            amount_paid=amount,
-            currency=credit.currency,
-            credit=credit,
-            transaction=transaction,
-        )
+        try:
+            account_method_amount = AccountMethodAmount.objects.create(
+                payment_method=credit.payment,
+                payment_code=str(uuid.uuid4()),
+                amount=amount,
+                amount_paid=amount,
+                currency=credit.currency,
+                credit=credit,
+                transaction=transaction,
+            )
+            print(f"Abono creado: ID={account_method_amount.id}, monto={account_method_amount.amount}")
+        except Exception as e:
+            print(f"Error al crear el abono: {e}")  # Depuración de excepción
+            return Response(
+                {"detail": f"Error al registrar el abono: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        print("Abono creado exitosamente, enviando respuesta al cliente")
 
         # Las señales manejarán la lógica adicional
         return Response(
-            {"detail": "Abono registrado exitosamente"}, status=status.HTTP_201_CREATED
+            {"detail": "Abono registrado exitosamente"},
+            status=status.HTTP_201_CREATED
         )
+
 
 class CreditViewSet(viewsets.ModelViewSet):
     queryset = Credit.objects.all()
