@@ -64,20 +64,19 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        print("El monto es válido, procediendo a crear la transacción")
+        print("El monto es válido, procediendo a crear la transacción y abono asociados")
 
-        # Crear la transacción
-        transaction = Transaction.objects.create(
-            transaction_type="income",
-            description=description or f"Pago registrado: {payment_type}",
-            user_id=user_id,
-            category_id=category_id,
-        )
-
-        print(f"Transacción creada: ID={transaction.id}, tipo={transaction.transaction_type}")
-
-        # Crear el abono (AccountMethodAmount)
         try:
+            # Crear la transacción
+            transaction = Transaction.objects.create(
+                transaction_type="income",
+                description=description or f"Pago registrado: {payment_type}",
+                user_id=user_id,
+                category_id=category_id,
+            )
+            print(f"Transacción creada: ID={transaction.id}, tipo={transaction.transaction_type}")
+
+            # Crear el abono (AccountMethodAmount) que será procesado por las señales
             account_method_amount = AccountMethodAmount.objects.create(
                 payment_method=credit.payment,
                 payment_code=str(uuid.uuid4()),
@@ -88,19 +87,19 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 transaction=transaction,
             )
             print(f"Abono creado: ID={account_method_amount.id}, monto={account_method_amount.amount}")
+
         except Exception as e:
-            print(f"Error al crear el abono: {e}")  # Depuración de excepción
+            print(f"Error durante la creación: {e}")  # Depuración de excepciones
             return Response(
-                {"detail": f"Error al registrar el abono: {str(e)}"},
+                {"detail": f"Error al registrar la transacción o abono: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        print("Abono creado exitosamente, enviando respuesta al cliente")
-
-        # Las señales manejarán la lógica adicional
+        # Respuesta exitosa
+        print("Transacción y abono registrados exitosamente, delegando lógica adicional a señales")
         return Response(
-            {"detail": "Abono registrado exitosamente"},
-            status=status.HTTP_201_CREATED
+            {"detail": "Transacción y abono registrados exitosamente"},
+            status=status.HTTP_201_CREATED,
         )
 
 
