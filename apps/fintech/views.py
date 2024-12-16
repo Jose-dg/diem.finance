@@ -34,50 +34,64 @@ class AccountViewSet(viewsets.ModelViewSet):
     queryset = Account.objects.all()
     serializer_class = AccountSerializer
 
+from django.core.exceptions import ObjectDoesNotExist
+
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
 
     def create(self, request, *args, **kwargs):
-        print("Inicio del método create")  # Rastro inicial
+        print("Datos recibidos en el backend:", request.data)
 
         # Extraer datos del request
         credit_uid = request.data.get("credit_uid")
         amount = Decimal(request.data.get("amount"))
         description = request.data.get("description")
         user_id = request.data.get("user_id")
-        category_id = request.data.get("category_id")
+        category_name = request.data.get("category_name")  # Nombre de la categoría
+        subcategory_name = request.data.get("subcategory_name")  # Nombre de la subcategoría
         payment_type = request.data.get("payment_type")
-
-        print(f"Datos recibidos del request: credit_uid={credit_uid}, amount={amount}, "
-              f"description={description}, user_id={user_id}, category_id={category_id}, "
-              f"payment_type={payment_type}")
 
         # Validar el crédito
         credit = get_object_or_404(Credit, uid=credit_uid)
-        print(f"Crédito encontrado: {credit.uid}, estado={credit.state}")
-
         if amount <= 0:
-            print("El monto ingresado es inválido (<= 0)")  # Depuración de error
+            return Response({"detail": "El monto debe ser mayor a 0"}, status=status.HTTP_400_BAD_REQUEST)
+
+        print(f"Buscando categoría: {category_name}, subcategoría: {subcategory_name}")
+
+        # Buscar la categoría por nombre
+        try:
+            category = Category.objects.get(name=category_name)
+            print(f"Categoría encontrada: ID={category.id}, nombre={category.name}")
+        except ObjectDoesNotExist:
             return Response(
-                {"detail": "El monto debe ser mayor a 0"},
+                {"detail": f"No se encontró una categoría con nombre {category_name}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        print("El monto es válido, procediendo a crear la transacción y abono asociados")
-
+        # Buscar la subcategoría por nombre
         try:
-            # Crear la transacción
+            subcategory = Subcategory.objects.get(name=subcategory_name, category=category)
+            print(f"Subcategoría encontrada: ID={subcategory.id}, nombre={subcategory.name}")
+        except ObjectDoesNotExist:
+            return Response(
+                {"detail": f"No se encontró una subcategoría con nombre {subcategory_name}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Crear la transacción
+        try:
             transaction = Transaction.objects.create(
                 transaction_type="income",
                 description=description or f"Pago registrado: {payment_type}",
                 user_id=user_id,
-                category_id=category_id,
+                category=category,
+                subcategory=subcategory,
             )
-            print(f"Transacción creada: ID={transaction.id}, tipo={transaction.transaction_type}")
+            print(f"Transacción creada: ID={transaction.id}")
 
-            # Crear el abono (AccountMethodAmount) que será procesado por las señales
-            account_method_amount = AccountMethodAmount.objects.create(
+            # Crear el abono
+            AccountMethodAmount.objects.create(
                 payment_method=credit.payment,
                 payment_code=str(uuid.uuid4()),
                 amount=amount,
@@ -86,21 +100,81 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 credit=credit,
                 transaction=transaction,
             )
-            print(f"Abono creado: ID={account_method_amount.id}, monto={account_method_amount.amount}")
-
+            print("Abono creado exitosamente")
         except Exception as e:
-            print(f"Error durante la creación: {e}")  # Depuración de excepciones
-            return Response(
-                {"detail": f"Error al registrar la transacción o abono: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            print(f"Error durante la creación: {e}")
+            return Response({"detail": f"Error al registrar la transacción: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Respuesta exitosa
-        print("Transacción y abono registrados exitosamente, delegando lógica adicional a señales")
-        return Response(
-            {"detail": "Transacción y abono registrados exitosamente"},
-            status=status.HTTP_201_CREATED,
-        )
+        return Response({"detail": "Transacción y abono registrados exitosamente"}, status=status.HTTP_201_CREATED)
+g
+
+# class TransactionViewSet(viewsets.ModelViewSet):
+#     queryset = Transaction.objects.all()
+#     serializer_class = TransactionSerializer
+
+#     def create(self, request, *args, **kwargs):
+#         print("Inicio del método create")  # Rastro inicial
+
+#         # Extraer datos del request
+#         credit_uid = request.data.get("credit_uid")
+#         amount = Decimal(request.data.get("amount"))
+#         description = request.data.get("description")
+#         user_id = request.data.get("user_id")
+#         category_id = request.data.get("category_id")
+#         payment_type = request.data.get("payment_type")
+
+#         print(f"Datos recibidos del request: credit_uid={credit_uid}, amount={amount}, "
+#               f"description={description}, user_id={user_id}, category_id={category_id}, "
+#               f"payment_type={payment_type}")
+
+#         # Validar el crédito
+#         credit = get_object_or_404(Credit, uid=credit_uid)
+#         print(f"Crédito encontrado: {credit.uid}, estado={credit.state}")
+
+#         if amount <= 0:
+#             print("El monto ingresado es inválido (<= 0)")  # Depuración de error
+#             return Response(
+#                 {"detail": "El monto debe ser mayor a 0"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         print("El monto es válido, procediendo a crear la transacción y abono asociados")
+
+#         try:
+#             # Crear la transacción
+#             transaction = Transaction.objects.create(
+#                 transaction_type="income",
+#                 description=description or f"Pago registrado: {payment_type}",
+#                 user_id=user_id,
+#                 category_id=category_id,
+#             )
+#             print(f"Transacción creada: ID={transaction.id}, tipo={transaction.transaction_type}")
+
+#             # Crear el abono (AccountMethodAmount) que será procesado por las señales
+#             account_method_amount = AccountMethodAmount.objects.create(
+#                 payment_method=credit.payment,
+#                 payment_code=str(uuid.uuid4()),
+#                 amount=amount,
+#                 amount_paid=amount,
+#                 currency=credit.currency,
+#                 credit=credit,
+#                 transaction=transaction,
+#             )
+#             print(f"Abono creado: ID={account_method_amount.id}, monto={account_method_amount.amount}")
+
+#         except Exception as e:
+#             print(f"Error durante la creación: {e}")  # Depuración de excepciones
+#             return Response(
+#                 {"detail": f"Error al registrar la transacción o abono: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
+
+#         # Respuesta exitosa
+#         print("Transacción y abono registrados exitosamente, delegando lógica adicional a señales")
+#         return Response(
+#             {"detail": "Transacción y abono registrados exitosamente"},
+#             status=status.HTTP_201_CREATED,
+#         )
 
 
 class CreditViewSet(viewsets.ModelViewSet):
