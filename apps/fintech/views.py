@@ -106,7 +106,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
             return Response({"detail": f"Error al registrar la transacción: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"detail": "Transacción y abono registrados exitosamente"}, status=status.HTTP_201_CREATED)
-g
+
 
 # class TransactionViewSet(viewsets.ModelViewSet):
 #     queryset = Transaction.objects.all()
