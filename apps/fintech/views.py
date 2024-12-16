@@ -71,7 +71,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
         # Buscar la subcategoría por nombre
         try:
-            subcategory = subcategory.objects.get(name=subcategory_name, category=category)
+            subcategory = SubCategory.objects.get(name=subcategory_name, category=category)
             print(f"Subcategoría encontrada: ID={subcategory.id}, nombre={subcategory.name}")
         except ObjectDoesNotExist:
             return Response(
