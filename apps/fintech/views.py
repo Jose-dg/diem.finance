@@ -1,7 +1,7 @@
 from decimal import Decimal
 import uuid
 from rest_framework import viewsets
-from .models import User, Account, Transaction, Credit, Expense
+from .models import Category, User, Account, Transaction, Credit, Expense
 from .serializers import (
     UserSerializer, 
     AccountSerializer, 
@@ -71,7 +71,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
         # Buscar la subcategoría por nombre
         try:
-            subcategory = Subcategory.objects.get(name=subcategory_name, category=category)
+            subcategory = subcategory.objects.get(name=subcategory_name, category=category)
             print(f"Subcategoría encontrada: ID={subcategory.id}, nombre={subcategory.name}")
         except ObjectDoesNotExist:
             return Response(
