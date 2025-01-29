@@ -127,6 +127,7 @@ class AccountMethodAmountInline(admin.TabularInline):
  
 class TransactionAdminForm(forms.ModelForm):
     class Meta:
+        list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date')
         model = Transaction
         fields = '__all__'
 
