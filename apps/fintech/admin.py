@@ -111,36 +111,15 @@ class AccountMethodAmountInline(admin.TabularInline):
     model = AccountMethodAmount
     extra = 1
 
-class TransactionForm(forms.ModelForm):
-    class Meta:
-        model = Transaction
-        fields = '__all__'
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if 'user' in self.fields:
-            self.fields['credit'].queryset = Credit.objects.none()  # Inicialmente vacío
-
-        if 'instance' in kwargs and kwargs['instance']:  # Si se está editando una transacción existente
-            user = kwargs['instance'].user
-            if user:
-                self.fields['credit'].queryset = Credit.objects.filter(user=user, state__in=['pending', 'completed'])
 
 @admin.register(Transaction)
 class TransactionAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    form = TransactionForm
     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
     search_fields = ('transaction_type', 'category__name', 'user__username')  # Cambié 'client__name' por 'user__username' porque 'client' no existe como tal
     inlines = [AccountMethodAmountInline]
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "credit":
-            user_id = request.GET.get("user")  # Intentar obtener el usuario de la URL
-            if user_id:
-                kwargs["queryset"] = Credit.objects.filter(user_id=user_id, state__in=['pending', 'completed'])
-            else:
-                kwargs["queryset"] = Credit.objects.none()  # Inicialmente vacío hasta que se seleccione un usuario
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    # Agregamos filtro para ver transacciones por usuario
+    list_filter = ('transaction_type', 'user')
 
     def get_currency(self, obj):
         inline = obj.account_method_amounts.first()  # Obtenemos el primer AccountMethodAmount
