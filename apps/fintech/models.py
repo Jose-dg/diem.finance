@@ -204,7 +204,6 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
-
 class Credit(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 

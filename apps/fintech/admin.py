@@ -2,6 +2,7 @@ from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from .models import AccountMethodAmount, DocumentType, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
 from django import forms
+from .models import Transaction, Credit
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -106,38 +107,24 @@ class PeriodicityAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
 
- 
 class AccountMethodAmountInline(admin.TabularInline):
     model = AccountMethodAmount
     extra = 1
-    
-# from django.contrib import admin
-# from django import forms
-# from .models import Transaction, Credit, AccountMethodAmount
+    autocomplete_fields = ['credit'] 
 
-# class AccountMethodAmountInline(admin.TabularInline):
-#     model = AccountMethodAmount
-#     extra = 1  # Número de filas adicionales para añadir
+    def get_queryset(self, request):
+        """
+        Muestra solo los créditos en estado 'pending' del usuario seleccionado en la transacción.
+        """
+        qs = super().get_queryset(request)
+        user_id = request.GET.get("user")  # Obtener usuario desde la URL
 
-#     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-#         """
-#         Filtra dinámicamente los créditos para mostrar solo los créditos 'pending' 
-#         del usuario seleccionado en la transacción.
-#         """
-#         if db_field.name == "credit":
-#             user_id = request.GET.get("user")  # Obtener el usuario desde la URL
-#             if user_id:
-#                 kwargs["queryset"] = Credit.objects.filter(user_id=user_id, state='pending')  # Solo créditos 'pending'
-#             else:
-#                 kwargs["queryset"] = Credit.objects.none()  # Si no hay usuario, mostrar vacío
+        if user_id:  # Si se seleccionó un usuario, filtrar créditos
+            return qs.filter(credit__user_id=user_id, credit__state='pending')
 
-#         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        return qs.none()  # Si no hay usuario, no mostrar nada
 
-
-from django.contrib import admin
-from django import forms
-from .models import Transaction, Credit
-
+ 
 class TransactionAdminForm(forms.ModelForm):
     class Meta:
         model = Transaction
@@ -191,68 +178,6 @@ class TransactionAdmin(admin.ModelAdmin):
         inline = obj.account_method_amounts.first()
         return inline.amount_paid if inline else "No Amount Paid"
     display_amount_paid.short_description = 'Amount Paid'
-
-
-# @admin.register(Transaction)
-# class TransactionAdmin(admin.ModelAdmin):
-#     form = TransactionAdminForm
-#     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
-#     search_fields = ('transaction_type', 'category__name', 'user__username')
-#     inlines = [AccountMethodAmountInline]
-
-#     class Media:
-#         js = ('admin/js/filter_credits.js',)  # Importamos el script para hacer la UI reactiva
-
-#     def get_currency(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.currency if inline else "No Currency"
-#     get_currency.short_description = 'Currency'
-
-#     def get_client(self, obj):
-#         return obj.user.username if obj.user else "No Client"
-#     get_client.short_description = 'Client'
-
-#     def display_payment_method(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.payment_method.name if inline else "No Payment Method"
-#     display_payment_method.short_description = 'Payment Method'
-
-#     def display_amount_paid(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.amount_paid if inline else "No Amount Paid"
-#     display_amount_paid.short_description = 'Amount Paid'
-
-
-# @admin.register(Transaction)
-# class TransactionAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-#     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
-#     search_fields = ('transaction_type', 'category__name', 'user__username')  # Cambié 'client__name' por 'user__username' porque 'client' no existe como tal
-#     inlines = [AccountMethodAmountInline]
-
-#     # Agregamos filtro para ver transacciones por usuario
-#     list_filter = ('transaction_type', 'user')
-
-#     def get_currency(self, obj):
-#         inline = obj.account_method_amounts.first()  # Obtenemos el primer AccountMethodAmount
-#         return inline.currency if inline else "No Currency"
-#     get_currency.short_description = 'Currency'
-
-#     def get_client(self, obj):
-#         return obj.user.username if obj.user else "No Client"
-#     get_client.short_description = 'Client'
-
-#     def display_payment_method(self, obj):
-#         # Mostrar el método de pago asociado
-#         inline = obj.account_method_amounts.first()
-#         return inline.payment_method.name if inline else "No Payment Method"
-#     display_payment_method.short_description = 'Payment Method'
-    
-#     def display_amount_paid(self, obj):
-#         # Mostrar el monto pagado asociado
-#         inline = obj.account_method_amounts.first()
-#         return inline.amount_paid if inline else "No Amount Paid"
-#     display_amount_paid.short_description = 'Amount Paid'
-
 
 @admin.register(Credit)
 class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
