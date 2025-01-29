@@ -107,9 +107,32 @@ class PeriodicityAdmin(admin.ModelAdmin):
     search_fields = ('name',)
 
  
+# class AccountMethodAmountInline(admin.TabularInline):
+#     model = AccountMethodAmount
+#     extra = 1
+    
+from django.contrib import admin
+from django import forms
+from .models import Transaction, Credit, AccountMethodAmount
+
 class AccountMethodAmountInline(admin.TabularInline):
     model = AccountMethodAmount
-    extra = 1
+    extra = 1  # Número de filas adicionales para añadir
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """
+        Filtra dinámicamente los créditos para mostrar solo los créditos 'pending' 
+        del usuario seleccionado en la transacción.
+        """
+        if db_field.name == "credit":
+            user_id = request.GET.get("user")  # Obtener el usuario desde la URL
+            if user_id:
+                kwargs["queryset"] = Credit.objects.filter(user_id=user_id, state='pending')  # Solo créditos 'pending'
+            else:
+                kwargs["queryset"] = Credit.objects.none()  # Si no hay usuario, mostrar vacío
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 from django.contrib import admin
 from django import forms
