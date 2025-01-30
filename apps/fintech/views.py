@@ -19,6 +19,9 @@ from django.utils.dateparse import parse_date
 from django.shortcuts import get_object_or_404
 from decimal import Decimal
 from django.core.exceptions import ObjectDoesNotExist
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
+
 
 from .models import (
     AccountMethodAmount,
@@ -253,8 +256,6 @@ class FinanceView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomTokenObtainPairSerializer
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """

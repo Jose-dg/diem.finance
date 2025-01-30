@@ -3,6 +3,7 @@ from import_export.admin import ImportExportModelAdmin
 from .models import AccountMethodAmount, DocumentType, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
 from django import forms
 from .models import Transaction, Credit
+from django.db.models import Q
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -107,8 +108,6 @@ class PeriodicityAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
 
-from django.db.models import Q
-
 class AccountMethodAmountInline(admin.TabularInline):
     model = AccountMethodAmount
     extra = 1
@@ -126,44 +125,6 @@ class TransactionAdminForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields['user'].queryset = User.objects.filter(pk=self.instance.user.pk)
 
-# Este es el que esta funcionando medianamente bien
-# @admin.register(Transaction)
-# class TransactionAdmin(admin.ModelAdmin):
-#     form = TransactionAdminForm
-#     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
-#     search_fields = ('transaction_type', 'category__name', 'user__username')
-#     autocomplete_fields = ['user']  # Permitir búsqueda rápida de usuario
-#     inlines = [AccountMethodAmountInline]
-
-#     def get_form(self, request, obj=None, **kwargs):
-#         """
-#         Pasar el objeto actual a request para que los inlines lo usen en `formfield_for_foreignkey`.
-#         """
-#         request._obj_ = obj
-#         return super().get_form(request, obj, **kwargs)
-
-#     class Media:
-#         js = ('admin/js/filter_credits.js',)  # Cargar el script para actualización dinámica
-
-#     def get_currency(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.currency if inline else "No Currency"
-#     get_currency.short_description = 'Currency'
-
-#     def get_client(self, obj):
-#         return obj.user.username if obj.user else "No Client"
-#     get_client.short_description = 'Client'
-
-#     def display_payment_method(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.payment_method.name if inline else "No Payment Method"
-#     display_payment_method.short_description = 'Payment Method'
-
-#     def display_amount_paid(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.amount_paid if inline else "No Amount Paid"
-#     display_amount_paid.short_description = 'Amount Paid'
-
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
     form = TransactionAdminForm
@@ -174,10 +135,13 @@ class TransactionAdmin(admin.ModelAdmin):
         'get_client', 
         'date', 
         'display_payment_method', 
-        'display_amount_paid'
+        'display_amount_paid',
+        'agent', 
+        'status',
+        'source',
     )
-    search_fields = ('transaction_type', 'category__name', 'user__username')
-    autocomplete_fields = ['user']
+    search_fields = ('transaction_type', 'category__name', 'user__username', 'agent__user__username')
+    autocomplete_fields = ['user', 'agent']
     inlines = [AccountMethodAmountInline]
 
     def get_form(self, request, obj=None, **kwargs):

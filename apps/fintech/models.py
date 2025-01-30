@@ -301,10 +301,28 @@ class Transaction(models.Model):
         ('income', 'Income'),
         ('expense', 'Expense')
     ]
+
+    TRANSACTION_STATUSES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('failed', 'Failed'),
+        ('reversed', 'Reversed')
+    ]
+
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     transaction_type = models.CharField(max_length=50, choices=TRANSACTION_TYPES)
     category = models.ForeignKey('SubCategory', on_delete=models.SET_NULL, null=True, related_name='transactions')
     user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='transactions')
+    agent = models.ForeignKey('Seller', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
+    status = models.CharField(max_length=50, choices=TRANSACTION_STATUSES, default='confirmed')
+    
+    source = models.CharField(max_length=50, choices=[
+        ('web', 'Web App'),
+        ('mobile', 'Mobile App'),
+        ('admin', 'Admin Panel'),
+        ('import', 'Imported Data'),
+    ], default='admin')
+    
     date = models.DateTimeField(default=timezone.now)
     description = models.TextField(null=True, blank=True)
  
