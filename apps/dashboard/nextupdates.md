@@ -143,15 +143,3 @@ class FinancialMetrics(models.Model):
     def calculate_metrics(self):
         # Logic to calculate various financial metrics
         pass
-
-# You may need to update your existing Transaction model to include more specific fields for tracking payments and expenses related to loan management.
-
-
-npm install -g expo-cli
-expo init fintech-mobile
-
-cd fintech-mobile
-npm start
-npm run android
-npm run ios
-npm run web
