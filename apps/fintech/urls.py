@@ -24,3 +24,5 @@ urlpatterns = [
     # Rutas para APIViews
     path('data/', FinanceView.as_view(), name='finance-summary')
 ]
+
+

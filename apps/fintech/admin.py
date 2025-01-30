@@ -144,6 +144,14 @@ class TransactionAdmin(admin.ModelAdmin):
     autocomplete_fields = ['user', 'agent']
     inlines = [AccountMethodAmountInline]
 
+    def save_model(self, request, obj, form, change):
+        """
+        Asigna un valor por defecto a `source` si no se ha establecido.
+        """
+        if not obj.source:  # 🔹 Si `source` está vacío, asignarlo
+            obj.source = 'admin'
+        super().save_model(request, obj, form, change)
+
     def get_form(self, request, obj=None, **kwargs):
         """
         Pasar el objeto actual a request para que los inlines lo usen en `formfield_for_foreignkey()`.
