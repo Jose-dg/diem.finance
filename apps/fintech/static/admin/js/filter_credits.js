@@ -1,11 +1,12 @@
 document.addEventListener("DOMContentLoaded", function () {
     const userSelect = document.querySelector("#id_user");
-    
+
     function updateCredits() {
         const userId = userSelect.value;
         if (!userId) return;
 
         document.querySelectorAll("[id^=id_accountmethodamount_set-][id$=-credit]").forEach(select => {
+            const selectedValue = select.value;  // 🔹 Guardamos el valor seleccionado antes de actualizar
             const url = new URL(window.location.href);
             url.searchParams.set('user', userId);
 
@@ -15,9 +16,14 @@ document.addEventListener("DOMContentLoaded", function () {
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, "text/html");
                     const newCreditSelect = doc.querySelector("#" + select.id);
-                    
+
                     if (newCreditSelect) {
                         select.innerHTML = newCreditSelect.innerHTML;
+
+                        // 🔹 Restaurar la opción seleccionada después de la actualización
+                        if (selectedValue && select.querySelector(`option[value="${selectedValue}"]`)) {
+                            select.value = selectedValue;
+                        }
                     }
                 })
                 .catch(error => console.error("Error updating credits:", error));
@@ -26,40 +32,45 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (userSelect) {
         userSelect.addEventListener("change", updateCredits);
-        updateCredits(); // Ejecutarlo al cargar la página para inicializarlo
+        updateCredits();  // Ejecutarlo al cargar la página para inicializarlo
     }
 });
 
 
 // document.addEventListener("DOMContentLoaded", function () {
-//    const userSelect = document.querySelector("#id_user");
-//    const creditSelect = document.querySelector("#id_credit");
+//     const userSelect = document.querySelector("#id_user");
 
-//    if (!userSelect || !creditSelect) return; // Evita errores si no encuentra los campos
+//     function updateCredits() {
+//         const userId = userSelect.value;
+//         if (!userId) return;
 
-//    function updateCredits() {
-//        const userId = userSelect.value;
-//        if (!userId) {
-//            creditSelect.innerHTML = '<option value="">---------</option>';
-//            return;
-//        }
+//         document.querySelectorAll("[id^=id_accountmethodamount_set-][id$=-credit]").forEach(select => {
+//             const selectedValue = select.value;  // 🔹 Guardamos el valor seleccionado antes de actualizar
+//             const url = new URL(window.location.href);
+//             url.searchParams.set('user', userId);
 
-//        const url = new URL(window.location.href);
-//        url.searchParams.set('user', userId);
+//             fetch(url)
+//                 .then(response => response.text())
+//                 .then(html => {
+//                     const parser = new DOMParser();
+//                     const doc = parser.parseFromString(html, "text/html");
+//                     const newCreditSelect = doc.querySelector("#" + select.id);
 
-//        fetch(url)
-//            .then(response => response.text())
-//            .then(html => {
-//                const parser = new DOMParser();
-//                const doc = parser.parseFromString(html, "text/html");
-//                const newCreditSelect = doc.querySelector("#id_credit");
+//                     if (newCreditSelect) {
+//                         select.innerHTML = newCreditSelect.innerHTML;
 
-//                if (newCreditSelect) {
-//                    creditSelect.innerHTML = newCreditSelect.innerHTML;
-//                }
-//            })
-//            .catch(error => console.error("Error updating credits:", error));
-//    }
+//                         // 🔹 Restaurar la opción seleccionada después de la actualización
+//                         if (selectedValue && select.querySelector(`option[value="${selectedValue}"]`)) {
+//                             select.value = selectedValue;
+//                         }
+//                     }
+//                 })
+//                 .catch(error => console.error("Error updating credits:", error));
+//         });
+//     }
 
-//    userSelect.addEventListener("change", updateCredits);
+//     if (userSelect) {
+//         userSelect.addEventListener("change", updateCredits);
+//         updateCredits();  // Ejecutarlo al cargar la página para inicializarlo
+//     }
 // });

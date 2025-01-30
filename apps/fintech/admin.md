@@ -114,6 +114,35 @@ class AccountMethodAmountInline(admin.TabularInline):
     extra = 1
     autocomplete_fields = ['credit']
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "credit":
+            obj_id = request.resolver_match.kwargs.get('object_id')  # ID de la transacción
+            user_id = None
+
+            if obj_id:  # Si estamos editando una transacción
+                try:
+                    transaction = Transaction.objects.get(pk=obj_id)
+                    user_id = transaction.user.id if transaction.user else None
+                except Transaction.DoesNotExist:
+                    pass
+            else:  # Si estamos creando una nueva transacción
+                user_id = request.GET.get("user")
+
+            if user_id:
+                # Dos condiciones con OR (usando Q objects)
+                # 1. Créditos 'pending' del usuario
+                # 2. Créditos YA ASOCIADOS a la transacción (sin importar su estado)
+                credit_queryset = Credit.objects.filter(
+                    Q(user_id=user_id, state='pending') |  # Créditos pendientes
+                    Q(accountmethodamount__transaction_id=obj_id)  # Créditos ya asociados
+                ).order_by('id').distinct()  # Importante el distinct() para evitar duplicados
+
+                kwargs["queryset"] = credit_queryset
+            else:
+                kwargs["queryset"] = Credit.objects.none()
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
 class TransactionAdminForm(forms.ModelForm):
     class Meta:
         model = Transaction
