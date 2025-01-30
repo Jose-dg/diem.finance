@@ -110,18 +110,18 @@ class PeriodicityAdmin(admin.ModelAdmin):
 class AccountMethodAmountInline(admin.TabularInline):
     model = AccountMethodAmount
     extra = 1
-    autocomplete_fields = ['credit']  # Mejor rendimiento con búsqueda rápida
+    autocomplete_fields = ['credit']
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """
-        Filtra los créditos del usuario seleccionado en la transacción.
+        Filtra los créditos disponibles en el campo 'Credit' para que solo se muestren
+        los créditos en estado 'pending' del usuario seleccionado en la transacción.
         """
         if db_field.name == "credit":
-            # Obtener el usuario desde la transacción
-            obj_id = request.resolver_match.kwargs.get('object_id')  # Si estamos editando una transacción existente
+            obj_id = request.resolver_match.kwargs.get('object_id')  # Obtener la ID de la transacción si existe
             user_id = None
 
-            if obj_id:  # Si estamos editando
+            if obj_id:  # Si estamos editando una transacción existente
                 try:
                     transaction = Transaction.objects.get(pk=obj_id)
                     user_id = transaction.user.id if transaction.user else None
@@ -131,28 +131,12 @@ class AccountMethodAmountInline(admin.TabularInline):
                 user_id = request.GET.get("user")
 
             if user_id:
-                kwargs["queryset"] = Credit.objects.filter(user_id=user_id, state='pending')  # Filtrar solo créditos activos del usuario
+                kwargs["queryset"] = Credit.objects.filter(user_id=user_id, state='pending')  # Solo créditos activos del usuario
             else:
                 kwargs["queryset"] = Credit.objects.none()  # Si no hay usuario, la lista queda vacía
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-# class AccountMethodAmountInline(admin.TabularInline):
-#     model = AccountMethodAmount
-#     extra = 1
-#     autocomplete_fields = ['credit'] 
-
-#     def get_queryset(self, request):
-#         """
-#         Muestra solo los créditos en estado 'pending' del usuario seleccionado en la transacción.
-#         """
-#         qs = super().get_queryset(request)
-#         user_id = request.GET.get("user")  # Obtener usuario desde la URL
-
-#         if user_id:  # Si se seleccionó un usuario, filtrar créditos
-#             return qs.filter(credit__user_id=user_id, credit__state='pending')
-
-#         return qs.none()  # Si no hay usuario, no mostrar nada
 
 class TransactionAdminForm(forms.ModelForm):
     class Meta:
@@ -161,10 +145,11 @@ class TransactionAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # 🔹 Si el usuario está en el formulario, filtramos solo los usuarios existentes
-        if 'user' in self.fields:
-            self.fields['user'].queryset = User.objects.all()
+
+        # Si estamos editando una transacción existente, aseguramos que se filtre el usuario
+        if self.instance and self.instance.pk:
+            self.fields['user'].queryset = User.objects.filter(pk=self.instance.user.pk)
+
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
@@ -208,48 +193,6 @@ class TransactionAdmin(admin.ModelAdmin):
         return inline.amount_paid if inline else "No Amount Paid"
     display_amount_paid.short_description = 'Amount Paid'
 
-
-# @admin.register(Transaction)
-# class TransactionAdmin(admin.ModelAdmin):
-#     form = TransactionAdminForm
-#     list_display = ('transaction_type', 'category', 'get_currency', 'get_client', 'date', 'display_payment_method', 'display_amount_paid')
-#     search_fields = ('transaction_type', 'category__name', 'user__username')
-#     inlines = [AccountMethodAmountInline]
-#     autocomplete_fields = ['user']  # Permitir búsqueda rápida de usuario
-
-#     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-#         """
-#         Filtra los créditos activos ('pending') del usuario seleccionado en la transacción.
-#         """
-#         if db_field.name == "credit":
-#             user_id = request.GET.get("user")  # Obtener el usuario desde la URL del admin
-#             if user_id:
-#                 kwargs["queryset"] = Credit.objects.filter(user_id=user_id, state='pending')  # Solo créditos activos del usuario
-#             else:
-#                 kwargs["queryset"] = Credit.objects.none()  # Si no hay usuario seleccionado, el queryset es vacío
-#         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-#     class Media:
-#         js = ('admin/js/filter_credits.js',)  # Cargar el script para actualización dinámica
-
-#     def get_currency(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.currency if inline else "No Currency"
-#     get_currency.short_description = 'Currency'
-
-#     def get_client(self, obj):
-#         return obj.user.username if obj.user else "No Client"
-#     get_client.short_description = 'Client'
-
-#     def display_payment_method(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.payment_method.name if inline else "No Payment Method"
-#     display_payment_method.short_description = 'Payment Method'
-
-#     def display_amount_paid(self, obj):
-#         inline = obj.account_method_amounts.first()
-#         return inline.amount_paid if inline else "No Amount Paid"
-#     display_amount_paid.short_description = 'Amount Paid'
 
 @admin.register(Credit)
 class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
