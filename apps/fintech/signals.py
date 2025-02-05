@@ -1,7 +1,12 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
-from .models import Expense, Transaction, AccountMethodAmount, Credit
-from datetime import date, timedelta, datetime
+
+from apps.fintech.utils import calculate_credit_morosity
+from .models import Transaction, AccountMethodAmount, Credit
+from datetime import datetime
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
@@ -21,7 +26,6 @@ def update_credit_on_account_method_change(sender, instance, **kwargs):
     """
     if instance.transaction.transaction_type == 'income':
         instance.credit.update_total_abonos(instance.amount_paid)
-
 
 @receiver(post_delete, sender=AccountMethodAmount)
 def adjust_credit_on_delete(sender, instance, **kwargs):
@@ -58,45 +62,19 @@ def create_transaction_and_account_method(sender, instance, created, **kwargs):
             amount_paid=instance.price,  # El monto entregado al cliente es igual al amount
             currency=instance.currency,
             credit=instance,
-            transaction=transaction  # Asignar la transacción creada
+            transaction=transaction  
         )
 
-@receiver(post_save, sender=AccountMethodAmount)
-def check_if_payment_is_due(sender, instance, **kwargs):
-    """
-    Verifica si el cliente ha incumplido pagos y ajusta el nivel de morosidad.
-    """
-    credit = instance.credit
-    today = date.today()
+@receiver(post_save, sender=Transaction)
+def update_credit_morosity(sender, instance, **kwargs):
+    """Actualiza la morosidad del crédito cuando se registra una transacción."""
 
-    # Calcular los días desde el primer pago
-    days_since_first_payment = (today - credit.first_date_payment).days
+    if instance.transaction_type != 'income' or instance.status != 'confirmed':
+        return
 
-    # Calcular cuántos pagos deberían haberse realizado hasta hoy
-    payments_due = days_since_first_payment // credit.periodicity.days if credit.periodicity else 0
+    credit = instance.user.credits.filter(state="pending").first()
+    
+    if not credit:
+        return
 
-    # Total que debería haberse pagado hasta hoy
-    total_expected_payment = payments_due * credit.installment_value if credit.installment_value else 0
-
-    # Evaluar el estado de morosidad
-    if credit.total_abonos < total_expected_payment:
-        if credit.total_abonos > 0:
-            credit.morosidad_level = 'mild_default'
-            missed_periods = (total_expected_payment - credit.total_abonos) // credit.installment_value
-            if missed_periods >= 2:
-                credit.morosidad_level = 'recurrent_default'
-        else:
-            if days_since_first_payment > 2 * credit.periodicity.days:
-                credit.morosidad_level = 'critical_default'
-            else:
-                credit.morosidad_level = 'severe_default'
-        credit.is_in_default = True
-    else:
-        expected_payment_date = credit.first_date_payment + timedelta(days=payments_due * credit.periodicity.days)
-        if payments_due > 0 and today > expected_payment_date:
-            credit.morosidad_level = 'moderate_default'
-        else:
-            credit.morosidad_level = 'on_time'
-            credit.is_in_default = False
-
-    credit.save()
+    calculate_credit_morosity(credit)  

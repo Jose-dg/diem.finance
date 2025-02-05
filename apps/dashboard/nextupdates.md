@@ -123,23 +123,4 @@ class Reminder(models.Model):
     is_sent = models.BooleanField(default=False)
     sent_date = models.DateTimeField(null=True, blank=True)
 
-class EarlyPaymentIncentive(models.Model):
-    credit = models.ForeignKey(Credit, on_delete=models.CASCADE, related_name='early_payment_incentives')
-    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2)
-    valid_until = models.DateTimeField()
-    is_claimed = models.BooleanField(default=False)
-
-class FinancialMetrics(models.Model):
-    date = models.DateField(unique=True)
-    total_loans_outstanding = models.DecimalField(max_digits=15, decimal_places=2)
-    total_revenue = models.DecimalField(max_digits=15, decimal_places=2)
-    total_expenses = models.DecimalField(max_digits=15, decimal_places=2)
-    net_income = models.DecimalField(max_digits=15, decimal_places=2)
-    default_rate = models.DecimalField(max_digits=5, decimal_places=2)
-    recovery_rate = models.DecimalField(max_digits=5, decimal_places=2)
-    average_loan_term = models.IntegerField()  # in days
-    average_interest_rate = models.DecimalField(max_digits=5, decimal_places=2)
-
-    def calculate_metrics(self):
-        # Logic to calculate various financial metrics
-        pass
+How works payment complete or according pay for save the debaut
