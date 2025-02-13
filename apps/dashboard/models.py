@@ -9,5 +9,8 @@ class CustomGroup(models.Model):
    created_at = models.DateTimeField(auto_now_add=True)
    updated_at = models.DateTimeField(auto_now=True)
 
+   class Meta:
+      app_label = "dashboard"
+
    def __str__(self):
       return self.name

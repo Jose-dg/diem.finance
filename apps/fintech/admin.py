@@ -50,7 +50,7 @@ class DocumentAdmin(admin.ModelAdmin):
 
 @admin.register(CategoryType)
 class CategoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('name', 'description')
+    list_display = ('uid', 'name', 'description')
     search_fields = ('name', )
 
 @admin.register(SubCategory)

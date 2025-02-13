@@ -51,7 +51,8 @@ THIRD_PARTY_APPS = [
 ]
 
 PROJECT_APPS = [
-    'apps.fintech'
+    'apps.fintech',
+    'apps.dashboard'
 ]
 
 INSTALLED_APPS = THIRD_PARTY_APPS + DJANGO_APPS + PROJECT_APPS

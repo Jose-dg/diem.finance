@@ -1,9 +1,13 @@
+import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from apps.fintech.serializers import CreditSerializer, TransactionSerializer
-from apps.fintech.models import Credit, Transaction
+from apps.fintech.models import AccountMethodAmount, CategoryType, Credit, Expense, Transaction
 from django.utils.dateparse import parse_date
+from django.utils.timezone import now
+from django.db.models import Sum, Count, F
+from datetime import datetime, timedelta
 
 # Vista para obtener transacciones en un período
 class TransactionsAPIView(APIView):
@@ -55,9 +59,7 @@ class CreditsAPIView(APIView):
         
         return Response(serialized_data)
 
-
 #Vista para resumen
-
 class FinanceView(APIView):
     def post(self, request):
         try:
@@ -84,8 +86,8 @@ class FinanceView(APIView):
             current_end_date = datetime.strptime(current_end_date, '%Y-%m-%d')
 
             # Convertir a fechas aware utilizando la zona horaria de Django
-            current_start_date = timezone.make_aware(current_start_date)
-            current_end_date = timezone.make_aware(current_end_date)
+            current_start_date = datetime.timezone.make_aware(current_start_date)
+            current_end_date = datetime.timezone.make_aware(current_end_date)
 
             # Calcular las fechas del periodo anterior
             previous_start_date = current_start_date - timedelta(days=periodicity_days)
@@ -200,5 +202,76 @@ class FinanceView(APIView):
                 {"error": str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+class CreditsVsRecaudosChart(APIView):
+    def post(self, request):
+        """
+        Endpoint para obtener la suma de créditos y recaudos por día, filtrados por un rango de fechas.
+        """
+        # 📌 Obtener fechas de la consulta o asignar valores predeterminados
+        start_date = request.data.get("start_date")
+        end_date = request.data.get("end_date")
 
+        # 📌 Si no se envían fechas, usamos últimos 30 días como predeterminado
+        if not start_date or not end_date:
+            end_date = now().date()
+            start_date = end_date - timedelta(days=30)
+        else:
+            # Convertir los parámetros a formato de fecha
+            try:
+                start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                return Response({"error": "Formato de fecha inválido. Use YYYY-MM-DD"}, status=400)
+
+        # 📌 Validar que `start_date` no sea mayor que `end_date`
+        if start_date > end_date:
+            return Response({"error": "La fecha de inicio no puede ser mayor que la fecha final."}, status=400)
+
+        # 📌 Créditos por día (suma y cantidad)
+        credits_per_day = (
+            Credit.objects
+            .filter(created_at__date__range=[start_date, end_date])
+            .values('created_at__date')
+            .annotate(
+                total_credits=Sum('price'),
+                count_credits=Count('id'),
+                total_earnings=Sum(F('price') - F('cost')))
+            )
+
+        recaudos_per_day = (
+            AccountMethodAmount.objects
+            .filter(transaction__transaction_type="income", transaction__date__range=[start_date, end_date])
+            .values('transaction__date')
+            .annotate(total_recaudos=Sum('amount_paid'), count_recaudos=Count('id'))
+        )
+        
+
+        # Filtering expenses for 'Operational Expenses' by uid
+        operational_expenses_type = CategoryType.objects.get(uid="17f1ad39-eec9-400e-ab03-8a47cd7f68d9")
+        expenses_per_day = (
+            Expense.objects
+            .filter(subcategory__category__category_type=operational_expenses_type, created_at__date__range=[start_date, end_date])
+            .values('created_at__date')
+            .annotate(total_expenses=Sum('amount'))
+        )
+
+        # 📌 Formatear datos en estructura esperada
+        chart_data = []
+        for credit in credits_per_day:
+            date = credit['created_at__date']
+            recaudo = next((item for item in recaudos_per_day if item.get('transaction__date') == date), {"total_recaudos": 0, "count_recaudos": 0})
+            expense = next((item for item in expenses_per_day if item['created_at__date'] == date), {"total_expenses": 0})
+
+            chart_data.append({
+                "date": date.strftime("%Y-%m-%d"),
+                "total_credits": float(credit['total_credits']),
+                "count_credits": credit['count_credits'],
+                "total_earnings": float(credit['total_earnings']),
+                "total_recaudos": float(recaudo["total_recaudos"]) if recaudo["total_recaudos"] else 0,
+                "count_recaudos": recaudo["count_recaudos"],
+                "total_expenses": float(expense["total_expenses"]) if expense["total_expenses"] else 0
+            })
+
+        return Response(chart_data)
 
