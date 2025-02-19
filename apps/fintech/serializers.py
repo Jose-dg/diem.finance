@@ -68,7 +68,7 @@ class CreditSerializer(serializers.ModelSerializer):
         model = Credit
         fields = [
             'created_at', 'uid', 'user', 'state', 'subcategory', 'cost', 'installment_number', 'installment_value', 'price', 'currency', 'total_abonos', 'pending_amount',
-            'first_date_payment', 'second_date_payment', 'credit_days', 'payments', 'description'
+            'first_date_payment', 'second_date_payment', 'credit_days', 'payments', 'description', 'morosidad_level'
         ]
 
     def get_payments(self, obj):
