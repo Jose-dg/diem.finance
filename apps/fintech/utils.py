@@ -1,5 +1,6 @@
 from datetime import timedelta, date
 from django.utils import timezone
+from django.db.models import Sum
 
 def calculate_credit_morosity(credit):
     """
