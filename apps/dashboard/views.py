@@ -58,6 +58,31 @@ class ClientsWithDefaultAPIView(APIView):
 #                 print(f"Error serializing credit {credit.id}: {str(e)}")
         
 #         return Response(serialized_data)
+# class CreditsAPIView(APIView):
+
+#     def post(self, request, *args, **kwargs):
+#         # Obtener las fechas del cuerpo
+#         start_date = parse_date(request.data.get('start_date'))
+#         end_date = parse_date(request.data.get('end_date'))
+
+#         if not start_date or not end_date:
+#             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
+
+#         # Filtrar los créditos financieros en el período con state="pending"
+#         credits = Credit.objects.filter(
+#             created_at__range=[start_date, end_date],
+#             state="pending"  # Filtro agregado
+#         ).order_by('-created_at')
+
+#         serialized_data = []
+#         for credit in credits:
+#             try:
+#                 serialized_data.append(CreditSerializer(credit).data)
+#             except Exception as e:
+#                 print(f"Error serializing credit {credit.uid}: {str(e)}")  # Cambié 'id' por 'uid' ya que Credit usa UUID
+        
+#         return Response(serialized_data)
+    
 class CreditsAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
@@ -68,11 +93,19 @@ class CreditsAPIView(APIView):
         if not start_date or not end_date:
             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Verificar que 'pending' es un valor válido en el modelo
+        valid_states = dict(Credit.ORDER_STATES).keys()
+        if 'pending' not in valid_states:
+            return Response({"error": "Estado 'pending' no es válido."}, status=status.HTTP_400_BAD_REQUEST)
+
         # Filtrar los créditos financieros en el período con state="pending"
         credits = Credit.objects.filter(
             created_at__range=[start_date, end_date],
-            state="pending"  # Filtro agregado
+            state="pending"  # Estrictamente minúscula porque así se almacena en la BD
         ).order_by('-created_at')
+
+        if not credits.exists():
+            return Response({"message": "No hay créditos pendientes en el rango de fechas dado."}, status=status.HTTP_404_NOT_FOUND)
 
         serialized_data = []
         for credit in credits:
@@ -82,6 +115,8 @@ class CreditsAPIView(APIView):
                 print(f"Error serializing credit {credit.uid}: {str(e)}")  # Cambié 'id' por 'uid' ya que Credit usa UUID
         
         return Response(serialized_data)
+
+
 
 
 
