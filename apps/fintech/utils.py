@@ -37,3 +37,18 @@ def calculate_credit_morosity(credit):
 
     # Guardar cambios en el modelo
     credit.save(update_fields=['morosidad_level', 'is_in_default'])
+
+def recalculate_credit_pending_amount(credit):
+    """
+    Recalcula el total de abonos y el saldo pendiente de un crédito.
+    """
+    total_abonos = credit.transaction_set.aggregate(total_abonos=Sum('amount'))['total_abonos'] or 0
+    pending_amount = max(credit.price - total_abonos, 0)
+
+    credit.total_abonos = total_abonos
+    credit.pending_amount = pending_amount
+    credit.save(update_fields=['total_abonos', 'pending_amount'])
+
+    return credit
+
+

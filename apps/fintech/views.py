@@ -2,7 +2,7 @@ from decimal import Decimal
 import uuid
 from rest_framework import viewsets
 
-from apps.fintech.utils import calculate_credit_morosity
+from apps.fintech.utils import calculate_credit_morosity, recalculate_credit_pending_amount
 from .models import ( 
    User, 
    Account, 
@@ -126,4 +126,24 @@ class RecalculateCreditMorosityView(APIView):
             "credit_uid": str(credit.uid),
             "morosidad_level": credit.morosidad_level,
             "is_in_default": credit.is_in_default,
+        }, status=status.HTTP_200_OK)
+
+class RecalculateCreditPendingAmountView(APIView):
+    """
+    Vista para recalcular manualmente el total_abonos y pending_amount de un crédito.
+    """
+
+    def post(self, request, credit_uid):
+        try:
+            credit = Credit.objects.get(uid=credit_uid, state="pending")
+        except Credit.DoesNotExist:
+            return Response({"error": "Crédito no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+        credit = recalculate_credit_pending_amount(credit)
+
+        return Response({
+            "message": "Saldo pendiente recalculado exitosamente",
+            "credit_uid": str(credit.uid),
+            "total_abonos": str(credit.total_abonos),
+            "pending_amount": str(credit.pending_amount),
         }, status=status.HTTP_200_OK)

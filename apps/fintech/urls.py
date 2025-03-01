@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     RecalculateCreditMorosityView,
+    RecalculateCreditPendingAmountView,
     UserViewSet,
     AccountViewSet,
     TransactionViewSet,
@@ -21,7 +22,8 @@ urlpatterns = [
     path('credits/', CreditViewSet.as_view({'get': 'list', 'post': 'create'}), name='credit-list'),
     path('credits/<int:pk>/', CreditViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='credit-detail'),
     
-    path('recalculate_cm/<uuid:credit_uid>/', RecalculateCreditMorosityView.as_view(), name='recalculate_credit_morosity')
+    path('recalculate_cm/<uuid:credit_uid>/', RecalculateCreditMorosityView.as_view(), name='recalculate_credit_morosity'),
+    path('recalculate_pending/<uuid:credit_uid>/', RecalculateCreditPendingAmountView.as_view(), name='recalculate_credit_pending_amount')
 
 ]
 

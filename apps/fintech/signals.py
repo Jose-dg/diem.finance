@@ -1,7 +1,7 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 
-from apps.fintech.utils import calculate_credit_morosity
+from apps.fintech.utils import calculate_credit_morosity, recalculate_credit_pending_amount
 from .models import Transaction, AccountMethodAmount, Credit
 from datetime import datetime
 from django.db.models.signals import post_save
@@ -78,3 +78,11 @@ def update_credit_morosity(sender, instance, **kwargs):
         return
 
     calculate_credit_morosity(credit)  
+
+@receiver(post_delete, sender=Transaction)
+def update_credit_on_transaction_delete(sender, instance, **kwargs):
+    """
+    Cuando una transacción es eliminada, recalcula el total_abonos y pending_amount del crédito asociado.
+    """
+    if instance.credit:
+        recalculate_credit_pending_amount(instance.credit)
