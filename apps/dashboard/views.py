@@ -36,53 +36,6 @@ class ClientsWithDefaultAPIView(APIView):
         serializer = CreditSerializer(credits, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-# Vista para obtener creditos de un periodo
-# class CreditsAPIView(APIView):
-
-#     def post(self, request, *args, **kwargs):
-#         # Obtener las fechas del cuerpo
-#         start_date = parse_date(request.data.get('start_date'))
-#         end_date = parse_date(request.data.get('end_date'))
-
-#         if not start_date or not end_date:
-#             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Filtrar los créditos financieros en el período
-#         credits = Credit.objects.filter(created_at__range=[start_date, end_date]).order_by('-created_at')
-
-#         serialized_data = []
-#         for credit in credits:
-#             try:
-#                 serialized_data.append(CreditSerializer(credit).data)
-#             except Exception as e:
-#                 print(f"Error serializing credit {credit.id}: {str(e)}")
-        
-#         return Response(serialized_data)
-# class CreditsAPIView(APIView):
-
-#     def post(self, request, *args, **kwargs):
-#         # Obtener las fechas del cuerpo
-#         start_date = parse_date(request.data.get('start_date'))
-#         end_date = parse_date(request.data.get('end_date'))
-
-#         if not start_date or not end_date:
-#             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Filtrar los créditos financieros en el período con state="pending"
-#         credits = Credit.objects.filter(
-#             created_at__range=[start_date, end_date],
-#             state="pending"  # Filtro agregado
-#         ).order_by('-created_at')
-
-#         serialized_data = []
-#         for credit in credits:
-#             try:
-#                 serialized_data.append(CreditSerializer(credit).data)
-#             except Exception as e:
-#                 print(f"Error serializing credit {credit.uid}: {str(e)}")  # Cambié 'id' por 'uid' ya que Credit usa UUID
-        
-#         return Response(serialized_data)
- 
 class CreditsAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
@@ -100,7 +53,6 @@ class CreditsAPIView(APIView):
 
         return Response(CreditSerializer(credits, many=True).data)
 
-#Vista para resumen
 class FinanceView(APIView):
     def post(self, request):
         try:
