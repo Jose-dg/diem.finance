@@ -130,18 +130,18 @@ class RecalculateCreditMorosityView(APIView):
 
 class RecalculateCreditPendingAmountView(APIView):
     """
-    Vista para recalcular manualmente el total_abonos y pending_amount de múltiples créditos.
+    Vista para recalcular manualmente el total_abonos y pending_amount de múltiples créditos,
+    recibiendo la lista de uids en el cuerpo de la solicitud.
     """
 
     def post(self, request, *args, **kwargs):
-        credit_uids = request.data.get('credit_uids', '')
-        if not credit_uids:
-            return Response({"error": "credit_uids son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
+        credit_uids = request.data.get('credit_uids', [])
+        if not credit_uids or not isinstance(credit_uids, list):
+            return Response({"error": "credit_uids deben ser una lista."}, status=status.HTTP_400_BAD_REQUEST)
 
-        uid_list = credit_uids.split(',')
         recalculated_credits = []
 
-        for uid in uid_list:
+        for uid in credit_uids:
             try:
                 credit = Credit.objects.get(uid=uid.strip(), state="pending")
                 credit = recalculate_credit_pending_amount(credit)

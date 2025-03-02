@@ -41,9 +41,10 @@ def calculate_credit_morosity(credit):
 
 def recalculate_credit_pending_amount(credit):
     """
-    Recalcula el total de abonos y el saldo pendiente de un crédito.
+    Recalcula el total de abonos y el saldo pendiente de un crédito,
+    sumando todas las transacciones de tipo "income".
     """
-    total_abonos = credit.transaction_set.aggregate(total_abonos=Sum('amount'))['total_abonos'] or 0
+    total_abonos = credit.transaction_set.filter(transaction_type="income").aggregate(total_abonos=Sum('amount'))['total_abonos'] or 0
     pending_amount = max(credit.price - total_abonos, 0)
 
     credit.total_abonos = total_abonos
@@ -51,5 +52,3 @@ def recalculate_credit_pending_amount(credit):
     credit.save(update_fields=['total_abonos', 'pending_amount'])
 
     return credit
-
-
