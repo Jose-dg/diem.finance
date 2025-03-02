@@ -36,6 +36,23 @@ class ClientsWithDefaultAPIView(APIView):
         serializer = CreditSerializer(credits, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+# class CreditsAPIView(APIView):
+
+#     def post(self, request, *args, **kwargs):
+#         start_date = parse_date(request.data.get('start_date'))
+#         end_date = parse_date(request.data.get('end_date'))
+
+#         if not start_date or not end_date:
+#             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
+
+#         # Filtrar créditos con estado "pending" dentro del rango de fechas
+#         credits = Credit.objects.filter(
+#             created_at__range=[start_date, end_date],
+#             state="pending"
+#         ).order_by('-created_at')
+
+#         return Response(CreditSerializer(credits, many=True).data)
+
 class CreditsAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
@@ -45,13 +62,22 @@ class CreditsAPIView(APIView):
         if not start_date or not end_date:
             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Filtrar créditos con estado "pending" dentro del rango de fechas
-        credits = Credit.objects.filter(
-            created_at__range=[start_date, end_date],
-            state="pending"
-        ).order_by('-created_at')
+        # Obtener todos los créditos dentro del rango de fechas
+        all_credits = Credit.objects.filter(created_at__range=[start_date, end_date])
 
-        return Response(CreditSerializer(credits, many=True).data)
+        # Filtrar créditos con estado "pending"
+        pending_credits = all_credits.filter(state="pending").order_by('-created_at')
+
+        # Depuración: Imprimir la cantidad de créditos encontrados
+        # print(f"Créditos encontrados en total: {all_credits.count()}")
+        # print(f"Créditos filtrados con estado 'pending': {pending_credits.count()}")
+
+        # Depuración: Imprimir los estados de los créditos encontrados
+        # print("Estados de los créditos encontrados:")
+        # for credit in all_credits:
+        #     print(f"{credit.uid}: {credit.state} - {credit.created_at}")
+
+        return Response(CreditSerializer(pending_credits, many=True).data)
 
 class FinanceView(APIView):
     def post(self, request):
