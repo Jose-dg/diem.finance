@@ -17,16 +17,16 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import CreditSerializer, TransactionSerializer
-from .models import User, Credit, Transaction, Expense, AccountMethodAmount, Transaction
+from .models import User, Credit, Transaction, AccountMethodAmount, Transaction
 from django.shortcuts import get_object_or_404
 from decimal import Decimal
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.fintech.serializers import CustomTokenObtainPairSerializer
+from django.db.models import Sum
 
 from .models import (
     AccountMethodAmount,
-    Expense,
     Credit,
     SubCategory
 )
@@ -130,20 +130,33 @@ class RecalculateCreditMorosityView(APIView):
 
 class RecalculateCreditPendingAmountView(APIView):
     """
-    Vista para recalcular manualmente el total_abonos y pending_amount de un crédito.
+    Vista para recalcular manualmente el total_abonos y pending_amount de múltiples créditos.
     """
 
-    def post(self, request, credit_uid):
-        try:
-            credit = Credit.objects.get(uid=credit_uid, state="pending")
-        except Credit.DoesNotExist:
-            return Response({"error": "Crédito no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+    def post(self, request, *args, **kwargs):
+        credit_uids = request.data.get('credit_uids', '')
+        if not credit_uids:
+            return Response({"error": "credit_uids son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
 
-        credit = recalculate_credit_pending_amount(credit)
+        uid_list = credit_uids.split(',')
+        recalculated_credits = []
+
+        for uid in uid_list:
+            try:
+                credit = Credit.objects.get(uid=uid.strip(), state="pending")
+                credit = recalculate_credit_pending_amount(credit)
+                recalculated_credits.append({
+                    "credit_uid": str(credit.uid),
+                    "total_abonos": str(credit.total_abonos),
+                    "pending_amount": str(credit.pending_amount),
+                })
+            except Credit.DoesNotExist:
+                recalculated_credits.append({
+                    "credit_uid": uid.strip(),
+                    "error": "Crédito no encontrado"
+                })
 
         return Response({
-            "message": "Saldo pendiente recalculado exitosamente",
-            "credit_uid": str(credit.uid),
-            "total_abonos": str(credit.total_abonos),
-            "pending_amount": str(credit.pending_amount),
+            "message": "Saldos pendientes recalculados",
+            "credits": recalculated_credits,
         }, status=status.HTTP_200_OK)
