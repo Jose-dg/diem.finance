@@ -2,28 +2,16 @@ import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from apps.fintech.models import Credit, Transaction, CategoryType, Credit, Expense, AccountMethodAmount
 from apps.fintech.serializers import CreditSerializer, TransactionSerializer
-from apps.fintech.models import AccountMethodAmount, CategoryType, Credit, Expense, Transaction
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now
 from django.db.models import Sum, Count, F
 from datetime import datetime, timedelta
-
-# Vista para obtener transacciones en un período
-class TransactionsAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        start_date = parse_date(request.data.get('start_date'))
-        end_date = parse_date(request.data.get('end_date'))
-
-        if not start_date or not end_date:
-            return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Filtrar las transacciones en el período
-        transactions = Transaction.objects.filter(date__range=[start_date, end_date])
-
-        # Usamos el serializer para todos los datos
-        serializer = TransactionSerializer(transactions, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.utils.dateparse import parse_date
 
 # Vista para obtener clientes con morosidad
 class ClientsWithDefaultAPIView(APIView):
@@ -35,6 +23,25 @@ class ClientsWithDefaultAPIView(APIView):
         # Usamos el CreditSerializer para serializar todos los datos
         serializer = CreditSerializer(credits, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class TransactionsAPIView(APIView):
+    """
+    Vista para obtener las transacciones dentro de un rango de fechas.
+    """
+
+    def post(self, request, *args, **kwargs):
+        start_date = parse_date(request.data.get('start_date'))
+        end_date = parse_date(request.data.get('end_date'))
+
+        if not start_date or not end_date:
+            return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Obtener todas las transacciones dentro del rango de fechas
+        transactions = Transaction.objects.filter(
+            date__range=[start_date, end_date]
+        ).order_by('-date')
+
+        return Response(TransactionSerializer(transactions, many=True).data, status=status.HTTP_200_OK)
 
 class CreditsAPIView(APIView):
 

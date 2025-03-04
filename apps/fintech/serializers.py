@@ -56,7 +56,8 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Transaction
-        fields = ['uid', 'transaction_type', 'account', 'date', 'amount', 'currency', 'method_amount']
+        # fields = ['uid', 'transaction_type', 'account', 'date', 'amount', 'currency', 'method_amount']
+        fields = '__all__'
 
 class CreditSerializer(serializers.ModelSerializer):
     user = UserSerializer()
