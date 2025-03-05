@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import *
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework import serializers
 
 User = get_user_model()
 
@@ -41,23 +43,54 @@ class AccountSerializer(serializers.ModelSerializer):
         model = Account
         fields = ['id_payment_method', 'name', 'account_number', 'balance', 'currency']
 
+# class AccountMethodAmountSerializer(serializers.ModelSerializer):
+#     payment_method = AccountSerializer()
+#     transaction_date = serializers.DateTimeField(source='transaction.date', read_only=True)
+
+#     class Meta:
+#         model = AccountMethodAmount
+#         fields = ['payment_method', 'amount', 'credit', 'transaction_date']
+
 class AccountMethodAmountSerializer(serializers.ModelSerializer):
     payment_method = AccountSerializer()
-    transaction_date = serializers.DateTimeField(source='transaction.date', read_only=True)
+    currency = serializers.StringRelatedField()
 
     class Meta:
         model = AccountMethodAmount
-        fields = ['payment_method', 'amount', 'credit', 'transaction_date']
+        fields = ['payment_method', 'payment_code', 'amount', 'amount_paid', 'currency']
+
+# class TransactionSerializer(serializers.ModelSerializer):
+#     account = AccountSerializer()
+#     method_amount = AccountMethodAmountSerializer()
+#     currency = CurrencySerializer()  
+
+#     class Meta:
+#         model = Transaction
+#         fields = '__all__'
+
 
 class TransactionSerializer(serializers.ModelSerializer):
-    account = AccountSerializer()
-    method_amount = AccountMethodAmountSerializer()
-    currency = CurrencySerializer()  
+    user = UserSerializer()
+    agent = UserSerializer()
+    category = SubCategorySerializer()
+    payments = serializers.SerializerMethodField()
+    credit = serializers.SerializerMethodField()
 
     class Meta:
         model = Transaction
-        # fields = ['uid', 'transaction_type', 'account', 'date', 'amount', 'currency', 'method_amount']
-        fields = '__all__'
+        fields = [
+            'uid', 'transaction_type', 'category', 'user', 'agent', 'status',
+            'source', 'date', 'description', 'payments', 'credit'
+        ]
+
+    def get_payments(self, obj):
+        payments = obj.account_method_amounts.all().order_by('transaction__date')
+        return AccountMethodAmountSerializer(payments, many=True).data
+
+    def get_credit(self, obj):
+        # Attempt to fetch the credit associated with the transaction
+        related_credit = obj.account_method_amounts.first()
+        return CreditSerializer(related_credit.credit).data if related_credit else None
 
 class CreditSerializer(serializers.ModelSerializer):
     user = UserSerializer()
@@ -111,12 +144,6 @@ class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
         fields = ['ui', 'subcategory', 'amount', 'description', ' date']
-
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework import serializers
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod

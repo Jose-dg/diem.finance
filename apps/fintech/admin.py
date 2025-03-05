@@ -128,18 +128,7 @@ class TransactionAdminForm(forms.ModelForm):
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
     form = TransactionAdminForm
-    list_display = (
-        'transaction_type', 
-        'category', 
-        'get_currency', 
-        'get_client', 
-        'date', 
-        'display_payment_method', 
-        'display_amount_paid',
-        'agent', 
-        'status',
-        'source',
-    )
+    list_display = ( 'transaction_type',  'category',  'get_currency',  'get_client',  'date',  'display_payment_method',  'display_amount_paid', 'agent',  'status', 'source')
     search_fields = ('transaction_type', 'category__name', 'user__username', 'agent__user__username')
     autocomplete_fields = ['user', 'agent']
     inlines = [AccountMethodAmountInline]
@@ -191,7 +180,7 @@ class TransactionAdmin(admin.ModelAdmin):
     display_amount_paid.short_description = 'Amount Paid'
 
     class Media:
-        js = ('admin/js/filter_credits.js',)  # Cargar el script para actualización dinámica
+        js = ('admin/js/filter_credits.js',)
 
 @admin.register(Credit)
 class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
