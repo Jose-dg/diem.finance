@@ -100,10 +100,12 @@ class CreditSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Credit
-        fields = [
-            'created_at', 'uid', 'user', 'state', 'subcategory', 'cost', 'installment_number', 'installment_value', 'price', 'currency', 'total_abonos', 'pending_amount',
-            'first_date_payment', 'second_date_payment', 'credit_days', 'payments', 'description', 'morosidad_level'
-        ]
+        fields = '__all__'
+
+        # fields = [
+        #     'created_at', 'uid', 'user', 'state', 'subcategory', 'cost', 'installment_number', 'installment_value', 'price', 'currency', 'total_abonos', 'pending_amount',
+        #     'first_date_payment', 'second_date_payment', 'credit_days', 'payments', 'description', 'morosidad_level'
+        # ]
 
     def get_payments(self, obj):
         payments = obj.payments.all().order_by('transaction__date')
@@ -123,15 +125,16 @@ class CreditDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Credit
-        fields = [
-            'uid', 'state', 'subcategory', 'cost', 'price', 'earnings',
-            'first_date_payment', 'second_date_payment', 'credit_days',
-            'description', 'interest', 'refinancing', 'total_abonos',
-            'pending_amount', 'installment_number', 'installment_value',
-            'is_in_default', 'created_at', 'updated_at', 'morosidad_level',
-            'category', 'user', 'currency', 'periodicity', 'payment', 'registered_by',
-            'abonos'
-        ]
+        fields = '__all__'
+        # fields = [
+        #     'uid', 'state', 'subcategory', 'cost', 'price', 'earnings',
+        #     'first_date_payment', 'second_date_payment', 'credit_days',
+        #     'description', 'interest', 'refinancing', 'total_abonos',
+        #     'pending_amount', 'installment_number', 'installment_value',
+        #     'is_in_default', 'created_at', 'updated_at', 'morosidad_level',
+        #     'category', 'user', 'currency', 'periodicity', 'payment', 'registered_by',
+        #     'abonos'
+        # ]
 
     def get_abonos(self, obj):
         abonos = obj.payments.all().order_by('transaction__date') if obj.payments.exists() else []
