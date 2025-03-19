@@ -104,14 +104,15 @@ class CreditSerializer(serializers.ModelSerializer):
         fields = '__all__'
     
     def get_payments(self, obj):
-        payments = AccountMethodAmount.objects.filter(credit=obj).select_related('transaction').order_by('transaction__date')
+        payments = AccountMethodAmount.objects.filter(credit=obj).select_related('transaction', 'currency').order_by('transaction__date')
+        
         return [
             {
                 "payment_method": AccountSerializer(payment.payment_method).data,
                 "payment_code": payment.payment_code,
                 "amount": payment.amount,
                 "amount_paid": payment.amount_paid,
-                "currency": payment.currency.currency,
+                "currency": payment.currency.currency if payment.currency else "No currency assigned",
                 "transaction_date": payment.transaction.date if payment.transaction else None,
             }
             for payment in payments
