@@ -1,6 +1,11 @@
 from datetime import timedelta, date
+import math
 from django.utils import timezone
 from django.db.models import Sum
+from decimal import Decimal
+from django.utils import timezone
+from models import Credit, CreditAdjustment  
+from django.db import transaction
 
 def calculate_credit_morosity(credit):
     """
@@ -52,3 +57,68 @@ def recalculate_credit_pending_amount(credit):
     credit.save(update_fields=['total_abonos', 'pending_amount'])
 
     return credit
+
+def evaluate_morosidad(credit):
+    """
+    Determina si el crédito está en mora y su nivel.
+    """
+    # Esto se puede hacer más complejo luego según reglas de negocio
+    overdue_days = (timezone.now().date() - credit.second_date_payment).days
+    is_in_default = overdue_days > 0
+
+    if overdue_days <= 0:
+        level = 'on_time'
+    elif overdue_days <= 5:
+        level = 'mild_default'
+    elif overdue_days <= 15:
+        level = 'moderate_default'
+    elif overdue_days <= 30:
+        level = 'severe_default'
+    elif overdue_days <= 60:
+        level = 'recurrent_default'
+    else:
+        level = 'critical_default'
+
+    return is_in_default, level
+
+@transaction.atomic
+def recalculate_credit(uuid):
+   credit = None
+
+   try:
+        credit = Credit.objects.select_related('periodicity').get(uid=uuid)
+   except Credit.DoesNotExist:
+        return None
+
+    # 1. Calcular intereses adicionales
+   total_interest_additions = credit.additional_interests.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    # 2. Recalcular earnings e interés
+   cost = Decimal(credit.cost)
+   price = Decimal(credit.price)
+   credit_days = Decimal(credit.credit_days)
+   periodicity_days = Decimal(credit.periodicity.days) if credit.periodicity else Decimal(1)
+
+   credit.earnings = price - cost
+   if cost and price and credit_days:
+        credit.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
+
+   # 3. Recalcular cuotas
+   if periodicity_days and credit_days:
+      installment_number = math.ceil(credit_days / periodicity_days)
+      credit.installment_number = installment_number
+      
+      if installment_number > 0:
+         credit.installment_value = (price / Decimal(installment_number)).quantize(Decimal('.01'))
+      else:
+         credit.installment_value = price
+
+    # 4. Recalcular pending amount incluyendo intereses y abonos
+   credit.pending_amount = (price + total_interest_additions) - credit.total_abonos
+
+    # 5. Recalcular morosidad
+   credit.is_in_default, credit.morosidad_level = evaluate_morosidad(credit)
+
+   credit.updated_at = timezone.now()
+   credit.save()
+   return credit

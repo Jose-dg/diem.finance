@@ -341,3 +341,30 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.subcategory} - {self.amount}"
+
+
+class Adjustment(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    code = models.CharField(max_length=20, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    is_positive = models.BooleanField(default=True)
+
+    def __str__(self):
+        sign = '+' if self.is_positive else '-'
+        return f"{self.name} ({sign}{self.code})"
+    
+class CreditAdjustment(models.Model):
+    credit = models.ForeignKey('Credit',on_delete=models.CASCADE,related_name='adjustments',null=True,blank=True)
+    type = models.ForeignKey('Adjustment', on_delete=models.SET_NULL, null=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    added_on = models.DateField(default=timezone.now)
+    reason = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-added_on']
+
+    def __str__(self):
+        signo = '+' if self.type and self.type.is_positive else '-'
+        return f"{self.type.name if self.type else 'Tipo desconocido'} {signo}${self.amount} al crédito {self.credit_id or 'sin asignar'} ({self.added_on})"

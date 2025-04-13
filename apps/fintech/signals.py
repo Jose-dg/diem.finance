@@ -65,23 +65,20 @@ def create_transaction_and_account_method(sender, instance, created, **kwargs):
         )
 
 @receiver(post_save, sender=Transaction)
-def update_credit_morosity(sender, instance, **kwargs):
-    """Actualiza la morosidad del crédito cuando se registra una transacción."""
-
+def handle_transaction_save(sender, instance, **kwargs):
+    """
+    Recalcula el crédito completo al guardar una transacción confirmada de ingreso.
+    """
     if instance.transaction_type != 'income' or instance.status != 'confirmed':
         return
 
-    credit = instance.user.credits.filter(state="pending").first()
-    
-    if not credit:
-        return
-
-    calculate_credit_morosity(credit)  
-
+    if instance.credit:
+        recalculate_credit(instance.credit.uid)
+        
 @receiver(post_delete, sender=Transaction)
-def update_credit_on_transaction_delete(sender, instance, **kwargs):
+def handle_transaction_delete(sender, instance, **kwargs):
     """
-    Cuando una transacción es eliminada, recalcula el total_abonos y pending_amount del crédito asociado.
+    Recalcula el crédito completo si se elimina una transacción que afecta el saldo.
     """
     if instance.credit:
-        recalculate_credit_pending_amount(instance.credit)
+        recalculate_credit(instance.credit.uid)
