@@ -4,8 +4,9 @@ from django.utils import timezone
 from django.db.models import Sum
 from decimal import Decimal
 from django.utils import timezone
-from models import Credit  
 from django.db import transaction
+
+from apps.fintech.models import Credit
 
 def calculate_credit_morosity(credit):
     """
