@@ -123,3 +123,4 @@ def recalculate_credit(uuid):
    credit.updated_at = timezone.now()
    credit.save()
    return credit
+

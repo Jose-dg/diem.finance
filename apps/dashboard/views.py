@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.utils.dateparse import parse_date
+from django.utils import timezone
+
 
 # Vista para obtener clientes con morosidad
 class ClientsWithDefaultAPIView(APIView):
@@ -64,30 +65,27 @@ class FinanceView(APIView):
     def post(self, request):
         try:
             # Validar datos requeridos
-
-            required_fields = ['start_date', 'end_date', 'periodicity_days']
+            required_fields = ['start_date', 'end_date']
             missing_fields = [field for field in required_fields if not request.data.get(field)]
-        
+
             if missing_fields:
                 return Response(
                     {
                         "error": f"Los siguientes campos son requeridos: {', '.join(missing_fields)}"
-                    }, 
+                    },
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Obtener fechas del request
-            current_start_date = request.data.get('start_date')
-            current_end_date = request.data.get('end_date')
-            periodicity_days = int(request.data.get('periodicity_days', 30))
-
-            # Convertir las fechas de cadena a objetos datetime
-            current_start_date = datetime.strptime(current_start_date, '%Y-%m-%d')
-            current_end_date = datetime.strptime(current_end_date, '%Y-%m-%d')
+            current_start_date = datetime.strptime(request.data['start_date'], '%Y-%m-%d')
+            current_end_date = datetime.strptime(request.data['end_date'], '%Y-%m-%d')
 
             # Convertir a fechas aware utilizando la zona horaria de Django
-            current_start_date = datetime.timezone.make_aware(current_start_date)
-            current_end_date = datetime.timezone.make_aware(current_end_date)
+            current_start_date = timezone.make_aware(current_start_date)
+            current_end_date = timezone.make_aware(current_end_date)
+
+            # Calcular periodicidad automáticamente
+            periodicity_days = (current_end_date - current_start_date).days
 
             # Calcular las fechas del periodo anterior
             previous_start_date = current_start_date - timedelta(days=periodicity_days)
@@ -95,63 +93,52 @@ class FinanceView(APIView):
 
             # -------------------- PERIODO ACTUAL --------------------
 
-            # Ingresos (abonos) en el periodo actual
             current_income = AccountMethodAmount.objects.filter(
                 transaction__transaction_type='income',
                 transaction__date__range=[current_start_date, current_end_date]
             ).aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
 
-            # Gastos en el periodo actual
             current_expense = Expense.objects.filter(
                 date__range=[current_start_date, current_end_date]
             ).aggregate(Sum('amount'))['amount__sum'] or 0
 
-            # Remaining en el periodo actual
             current_remaining = current_income - current_expense
 
-            # Créditos dados en el periodo actual
             current_loans = Credit.objects.filter(
                 first_date_payment__range=[current_start_date, current_end_date]
             ).aggregate(Sum('price'))['price__sum'] or 0
 
-            # Saldos pendientes (receivables) en el periodo actual
             current_receivables = Credit.objects.filter(
                 first_date_payment__range=[current_start_date, current_end_date],
                 pending_amount__gt=0
             ).aggregate(Sum('pending_amount'))['pending_amount__sum'] or 0
 
-            # Ganancias (earnings) en el periodo actual
             current_earnings = Credit.objects.filter(
                 first_date_payment__range=[current_start_date, current_end_date]
             ).aggregate(total=Sum('earnings'))['total'] or 0
 
             # -------------------- PERIODO ANTERIOR --------------------
 
-            # Ingresos del periodo anterior
             previous_income = AccountMethodAmount.objects.filter(
                 transaction__transaction_type='income',
                 transaction__date__range=[previous_start_date, previous_end_date]
             ).aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
 
-            # Gastos del periodo anterior
             previous_expense = Expense.objects.filter(
                 date__range=[previous_start_date, previous_end_date]
             ).aggregate(Sum('amount'))['amount__sum'] or 0
 
             previous_remaining = previous_income - previous_expense
 
-            # Créditos del periodo anterior
             previous_loans = Credit.objects.filter(
                 first_date_payment__range=[previous_start_date, previous_end_date]
             ).aggregate(Sum('price'))['price__sum'] or 0
 
-            # Receivables del periodo anterior
             previous_receivables = Credit.objects.filter(
                 first_date_payment__range=[previous_start_date, previous_end_date],
                 pending_amount__gt=0
             ).aggregate(Sum('pending_amount'))['pending_amount__sum'] or 0
 
-            # Earnings del periodo anterior
             previous_earnings = Credit.objects.filter(
                 first_date_payment__range=[previous_start_date, previous_end_date]
             ).aggregate(total=Sum('earnings'))['total'] or 0
@@ -199,10 +186,11 @@ class FinanceView(APIView):
 
         except Exception as e:
             return Response(
-                {"error": str(e)}, 
+                {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
+      
 class CreditsVsRecaudosChart(APIView):
     def post(self, request):
         """

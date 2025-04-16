@@ -43,14 +43,6 @@ class AccountSerializer(serializers.ModelSerializer):
         model = Account
         fields = ['id_payment_method', 'name', 'account_number', 'balance', 'currency']
 
-# class AccountMethodAmountSerializer(serializers.ModelSerializer):
-#     payment_method = AccountSerializer()
-#     transaction_date = serializers.DateTimeField(source='transaction.date', read_only=True)
-
-#     class Meta:
-#         model = AccountMethodAmount
-#         fields = ['payment_method', 'amount', 'credit', 'transaction_date']
-
 class AccountMethodAmountSerializer(serializers.ModelSerializer):
     payment_method = AccountSerializer()
     currency = serializers.StringRelatedField()
@@ -59,16 +51,6 @@ class AccountMethodAmountSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountMethodAmount
         fields = ['payment_method', 'payment_code', 'amount', 'amount_paid', 'currency', 'transaction_date']
-
-# class TransactionSerializer(serializers.ModelSerializer):
-#     account = AccountSerializer()
-#     method_amount = AccountMethodAmountSerializer()
-#     currency = CurrencySerializer()  
-
-#     class Meta:
-#         model = Transaction
-#         fields = '__all__'
-
 
 class TransactionSerializer(serializers.ModelSerializer):
     user = UserSerializer()
@@ -88,43 +70,73 @@ class TransactionSerializer(serializers.ModelSerializer):
         payments = AccountMethodAmount.objects.filter(transaction=obj).order_by('transaction__date')
         return AccountMethodAmountSerializer(payments, many=True).data
 
-    # def get_credit(self, obj):
-    #     # Attempt to fetch the credit associated with the transaction
-    #     related_credit = obj.account_method_amounts.first()
-    #     return CreditSerializer(related_credit.credit).data if related_credit else None
 
 class CreditSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
-    payments = serializers.SerializerMethodField()
+    # ① campos que ya tenías
+    user       = UserSerializer()
+    payments   = serializers.SerializerMethodField()
     subcategory = SubCategorySerializer()
-    currency = CurrencySerializer()
+    currency   = CurrencySerializer()
+
+    # ② nuevo campo: número de días de la periodicidad
+    periodicity_days = serializers.IntegerField(
+        source='periodicity.days',
+        read_only=True
+    )
 
     class Meta:
-        model = Credit
-        fields = '__all__'
-    
+        model  = Credit
+        fields = '__all__'        # DRF incluirá también periodicity_days
+
     def get_payments(self, obj):
-        payments = AccountMethodAmount.objects.filter(credit=obj).select_related('transaction', 'currency').order_by('transaction__date')
-        
+        qs = AccountMethodAmount.objects.filter(
+            credit=obj
+        ).select_related('transaction', 'currency').order_by('transaction__date')
+
         return [
             {
-                "payment_method": AccountSerializer(payment.payment_method).data,
-                "payment_code": payment.payment_code,
-                "amount": payment.amount,
-                "amount_paid": payment.amount_paid,
-                "currency": payment.currency.currency if payment.currency else "No currency assigned",
-                "transaction_date": payment.transaction.date if payment.transaction else None,
+                "payment_method": AccountSerializer(p.payment_method).data,
+                "payment_code":   p.payment_code,
+                "amount":         p.amount,
+                "amount_paid":    p.amount_paid,
+                "currency":       p.currency.currency if p.currency else "No currency",
+                "transaction_date": p.transaction.date if p.transaction else None,
             }
-            for payment in payments
+            for p in qs
         ]
+
+# class CreditSerializer(serializers.ModelSerializer):
+#     user = UserSerializer()
+#     payments = serializers.SerializerMethodField()
+#     subcategory = SubCategorySerializer()
+#     currency = CurrencySerializer()
+
+#     class Meta:
+#         model = Credit
+#         fields = '__all__'
     
-    def update(self, instance, validated_data):
-        # Lógica personalizada para actualizar el saldo pendiente y los pagos
-        total_abonos = sum(payment['amount'] for payment in validated_data.get('payments', []))
-        instance.total_abonos = total_abonos
-        instance.pending_amount = instance.price - total_abonos
-        instance.save()
-        return instance
+#     def get_payments(self, obj):
+#         payments = AccountMethodAmount.objects.filter(credit=obj).select_related('transaction', 'currency').order_by('transaction__date')
+        
+#         return [
+#             {
+#                 "payment_method": AccountSerializer(payment.payment_method).data,
+#                 "payment_code": payment.payment_code,
+#                 "amount": payment.amount,
+#                 "amount_paid": payment.amount_paid,
+#                 "currency": payment.currency.currency if payment.currency else "No currency assigned",
+#                 "transaction_date": payment.transaction.date if payment.transaction else None,
+#             }
+#             for payment in payments
+#         ]
+    
+#     def update(self, instance, validated_data):
+#         # Lógica personalizada para actualizar el saldo pendiente y los pagos
+#         total_abonos = sum(payment['amount'] for payment in validated_data.get('payments', []))
+#         instance.total_abonos = total_abonos
+#         instance.pending_amount = instance.price - total_abonos
+#         instance.save()
+#         return instance
     
 class CreditDetailSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
@@ -137,26 +149,11 @@ class CreditDetailSerializer(serializers.ModelSerializer):
         class Meta:
             model = Credit
             fields = '__all__'
-        # fields = '__all__'
-        # fields = [
-        #     'uid', 'state', 'subcategory', 'cost', 'price', 'earnings',
-        #     'first_date_payment', 'second_date_payment', 'credit_days',
-        #     'description', 'interest', 'refinancing', 'total_abonos',
-        #     'pending_amount', 'installment_number', 'installment_value',
-        #     'is_in_default', 'created_at', 'updated_at', 'morosidad_level',
-        #     'category', 'user', 'currency', 'periodicity', 'payment', 'registered_by',
-        #     'abonos'
-        # ]
     
     def get_abonos(self, obj):
         abonos = AccountMethodAmount.objects.filter(credit=obj).order_by('transaction__date')
         return AccountMethodAmountSerializer(abonos, many=True).data
-    
 
-    # def get_abonos(self, obj):
-    #     abonos = obj.payments.all().order_by('transaction__date') if obj.payments.exists() else []
-    #     return AccountMethodAmountSerializer(abonos, many=True).data
-    
 class ExpenseSerializer(serializers.ModelSerializer):
     subcategory = SubCategorySerializer()
     user = UserSerializer()

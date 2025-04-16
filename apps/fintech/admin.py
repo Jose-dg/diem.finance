@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
-from .models import AccountMethodAmount, DocumentType, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
+from .models import AccountMethodAmount, Adjustment, CreditAdjustment, DocumentType, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
 from django import forms
 from .models import Transaction, Credit
 from django.db.models import Q
@@ -211,3 +211,19 @@ class SellerAdmin(admin.ModelAdmin):
     def get_user(self, obj):
         return obj.user.username
     get_user.short_description = 'Seller Username'
+
+@admin.register(Adjustment)
+class AdjustmentAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'is_positive', 'description')
+    search_fields = ('code', 'name')
+    list_filter = ('is_positive',)
+    ordering = ('code',)
+
+@admin.register(CreditAdjustment)
+class CreditAdjustmentAdmin(admin.ModelAdmin):
+    list_display = ('credit', 'type', 'amount', 'added_on', 'reason', 'created_at')
+    search_fields = ('credit__id', 'type__name', 'reason')
+    list_filter = ('type__is_positive', 'added_on', 'created_at')
+    date_hierarchy = 'added_on'
+    ordering = ('-added_on',)
+    
