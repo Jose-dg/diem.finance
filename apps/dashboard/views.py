@@ -61,10 +61,38 @@ class CreditsAPIView(APIView):
 
         return Response(CreditSerializer(pending_credits, many=True).data)
 
+# class SortedCreditsByLabelAPIView(APIView):
+#     def post(self, request, *args, **kwargs):
+#         from datetime import datetime, time
+#         from django.utils.timezone import make_aware
+
+#         start_raw = request.data.get('start_date')
+#         end_raw = request.data.get('end_date')
+
+#         if not start_raw or not end_raw:
+#             return Response(
+#                 {"error": "start_date and end_date are required."},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         start_date = make_aware(datetime.combine(parse_date(start_raw), time.min))
+#         end_date = make_aware(datetime.combine(parse_date(end_raw), time.max))
+
+#         credits = Credit.objects.filter(
+#             created_at__range=[start_date, end_date],
+#             state="pending"
+#         ).select_related('user__label').order_by(
+#             F('user__label__name').asc(nulls_last=True),
+#             '-created_at'
+#         )
+
+#         return Response(CreditSimpleSerializer(credits, many=True).data)
+
 class SortedCreditsByLabelAPIView(APIView):
     def post(self, request, *args, **kwargs):
         from datetime import datetime, time
         from django.utils.timezone import make_aware
+        from django.db.models import F
 
         start_raw = request.data.get('start_date')
         end_raw = request.data.get('end_date')
@@ -81,7 +109,10 @@ class SortedCreditsByLabelAPIView(APIView):
         credits = Credit.objects.filter(
             created_at__range=[start_date, end_date],
             state="pending"
-        ).select_related('user__label').order_by(
+        ).select_related(
+            'user__label', 'periodicity'
+        ).order_by(
+            F('periodicity__days').asc(nulls_last=True),
             F('user__label__name').asc(nulls_last=True),
             '-created_at'
         )
