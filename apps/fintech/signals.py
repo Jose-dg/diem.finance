@@ -64,16 +64,35 @@ def create_transaction_and_account_method(sender, instance, created, **kwargs):
             transaction=transaction  
         )
 
+# @receiver(post_save, sender=Transaction)
+# def handle_transaction_save(sender, instance, **kwargs):
+#     """
+#     Recalcula el crédito completo al guardar una transacción confirmada de ingreso.
+#     """
+#     if instance.transaction_type != 'income' or instance.status != 'confirmed':
+#         return
+
+#     if instance.credit:
+#         recalculate_credit(instance.credit.uid)
+
 @receiver(post_save, sender=Transaction)
 def handle_transaction_save(sender, instance, **kwargs):
     """
-    Recalcula el crédito completo al guardar una transacción confirmada de ingreso.
+    Recalcula el crédito relacionado con una transacción de ingreso confirmada.
     """
     if instance.transaction_type != 'income' or instance.status != 'confirmed':
         return
 
-    if instance.credit:
-        recalculate_credit(instance.credit.uid)
+    try:
+        # Buscar el primer AccountMethodAmount relacionado a esta transacción
+        ama = AccountMethodAmount.objects.filter(transaction=instance).select_related('credit').first()
+
+        if ama and ama.credit:
+            recalculate_credit(ama.credit.uid)
+
+    except Exception as e:
+        # Recomendado para debug, puedes poner logging si lo prefieres
+        print(f"[ERROR] No se pudo recalcular el crédito: {e}")
         
 @receiver(post_delete, sender=Transaction)
 def handle_transaction_delete(sender, instance, **kwargs):
