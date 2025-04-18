@@ -138,6 +138,20 @@ class CreditSerializer(serializers.ModelSerializer):
 #         instance.save()
 #         return instance
     
+class CreditSimpleSerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+    subcategory = SubCategorySerializer()
+    currency = CurrencySerializer()
+    periodicity_days = serializers.IntegerField(source='periodicity.days', read_only=True)
+
+    class Meta:
+        model = Credit
+        fields = [
+            'id', 'uid', 'user', 'state', 'price', 'pending_amount', 'currency',
+            'subcategory', 'periodicity_days', 'installment_number', 'installment_value',
+            'first_date_payment', 'second_date_payment', 'created_at'
+        ]
+        
 class CreditDetailSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     abonos = serializers.SerializerMethodField()
