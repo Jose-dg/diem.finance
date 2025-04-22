@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
-
+from django.db.models.functions import TruncDate
 
 # Vista para obtener clientes con morosidad
 class ClientsWithDefaultAPIView(APIView):
@@ -118,7 +118,6 @@ class SortedCreditsByLabelAPIView(APIView):
         )
 
         return Response(CreditSimpleSerializer(credits, many=True).data)
-
 
 class FinanceView(APIView):
     def post(self, request):
@@ -249,76 +248,52 @@ class FinanceView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-      
-class CreditsVsRecaudosChart(APIView):
+class SellerChartDataAPIView(APIView):
+    # permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        """
-        Endpoint para obtener la suma de créditos y recaudos por día, filtrados por un rango de fechas.
-        """
-        # 📌 Obtener fechas de la consulta o asignar valores predeterminados
-        start_date = request.data.get("start_date")
-        end_date = request.data.get("end_date")
+        # Obtener rango de fechas desde el body (últimos 90 días por defecto)
+        range_days = int(request.data.get("range", 90))
+        end_date = now().date()
+        start_date = end_date - timedelta(days=range_days)
 
-        # 📌 Si no se envían fechas, usamos últimos 30 días como predeterminado
-        if not start_date or not end_date:
-            end_date = now().date()
-            start_date = end_date - timedelta(days=30)
-        else:
-            # Convertir los parámetros a formato de fecha
-            try:
-                start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-                end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-            except ValueError:
-                return Response({"error": "Formato de fecha inválido. Use YYYY-MM-DD"}, status=400)
-
-        # 📌 Validar que `start_date` no sea mayor que `end_date`
-        if start_date > end_date:
-            return Response({"error": "La fecha de inicio no puede ser mayor que la fecha final."}, status=400)
-
-        # 📌 Créditos por día (suma y cantidad)
-        credits_per_day = (
-            Credit.objects
-            .filter(created_at__date__range=[start_date, end_date])
-            .values('created_at__date')
+        # Créditos entregados por vendedor
+        credit_qs = (
+            Credit.objects.filter(created_at__date__range=(start_date, end_date))
+            .annotate(date=TruncDate('created_at'))
+            .values('date', 'seller__user__first_name', 'subcategory__name')
             .annotate(
-                total_credits=Sum('price'),
-                count_credits=Count('id'),
-                total_earnings=Sum(F('price') - F('cost')))
+                credits=Count('id'),
+                earnings=Sum('earnings'),
             )
-
-        recaudos_per_day = (
-            AccountMethodAmount.objects
-            .filter(transaction__transaction_type="income", transaction__date__range=[start_date, end_date])
-            .values('transaction__date')
-            .annotate(total_recaudos=Sum('amount_paid'), count_recaudos=Count('id'))
-        )
-        
-
-        # Filtering expenses for 'Operational Expenses' by uid
-        operational_expenses_type = CategoryType.objects.get(uid="17f1ad39-eec9-400e-ab03-8a47cd7f68d9")
-        expenses_per_day = (
-            Expense.objects
-            .filter(subcategory__category__category_type=operational_expenses_type, created_at__date__range=[start_date, end_date])
-            .values('created_at__date')
-            .annotate(total_expenses=Sum('amount'))
         )
 
-        # 📌 Formatear datos en estructura esperada
-        chart_data = []
-        for credit in credits_per_day:
-            date = credit['created_at__date']
-            recaudo = next((item for item in recaudos_per_day if item.get('transaction__date') == date), {"total_recaudos": 0, "count_recaudos": 0})
-            expense = next((item for item in expenses_per_day if item['created_at__date'] == date), {"total_expenses": 0})
+        # Pagos realizados por vendedor
+        payment_qs = (
+            AccountMethodAmount.objects.filter(created_at__date__range=(start_date, end_date))
+            .annotate(date=TruncDate('created_at'))
+            .values('date', 'credit__seller__user__first_name', 'credit__subcategory__name')
+            .annotate(
+                payments=Sum('amount_paid')
+            )
+        )
 
-            chart_data.append({
-                "date": date.strftime("%Y-%m-%d"),
-                "total_credits": float(credit['total_credits']),
-                "count_credits": credit['count_credits'],
-                "total_earnings": float(credit['total_earnings']),
-                "total_recaudos": float(recaudo["total_recaudos"]) if recaudo["total_recaudos"] else 0,
-                "count_recaudos": recaudo["count_recaudos"],
-                "total_expenses": float(expense["total_expenses"]) if expense["total_expenses"] else 0
-            })
+        # Unificar resultados en un solo diccionario agrupado por fecha, vendedor y tipo de crédito
+        data_dict = {}
 
-        return Response(chart_data)
+        for row in credit_qs:
+            key = (row['date'], row['seller__user__first_name'], row['subcategory__name'])
+            data_dict.setdefault(key, {'date': row['date'], 'seller': row['seller__user__first_name'], 'credit_type': row['subcategory__name'], 'credits': 0, 'payments': 0, 'earnings': 0})
+            data_dict[key]['credits'] = row['credits']
+            data_dict[key]['earnings'] = float(row['earnings'] or 0)
+
+        for row in payment_qs:
+            key = (row['date'], row['credit__seller__user__first_name'], row['credit__subcategory__name'])
+            data_dict.setdefault(key, {'date': row['date'], 'seller': row['credit__seller__user__first_name'], 'credit_type': row['credit__subcategory__name'], 'credits': 0, 'payments': 0, 'earnings': 0})
+            data_dict[key]['payments'] = float(row['payments'] or 0)
+
+        # Convertir a lista ordenada por fecha
+        data = sorted(data_dict.values(), key=lambda x: x['date'])
+        return Response(data)
+
 

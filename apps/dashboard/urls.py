@@ -3,6 +3,7 @@ from .views import (
    CreditsAPIView,
    CreditsVsRecaudosChart,
    FinanceView,
+   SellerChartDataAPIView,
    TransactionsAPIView, 
    ClientsWithDefaultAPIView,
    SortedCreditsByLabelAPIView
@@ -15,7 +16,7 @@ urlpatterns = [
     
     # Rutas para APIViews
     path('data/', FinanceView.as_view(), name='finance-summary'),
-    path('charts/credits-vs-recaudos/', CreditsVsRecaudosChart.as_view(), name='credits-vs-recaudos-chart'),
     path('sheet/', SortedCreditsByLabelAPIView.as_view(), name='creditw'),
+    path("chart/sellers/", SellerChartDataAPIView.as_view(), name="chart-sellers"),
 ]
 
