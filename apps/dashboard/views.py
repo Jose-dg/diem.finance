@@ -249,7 +249,7 @@ class FinanceView(APIView):
             )
 
 class SellerChartDataAPIView(APIView):
-    # permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Desactivado temporalmente
 
     def post(self, request):
         # Obtener rango de fechas desde el body (últimos 90 días por defecto)
@@ -268,10 +268,10 @@ class SellerChartDataAPIView(APIView):
             )
         )
 
-        # Pagos realizados por vendedor
+        # Pagos realizados por vendedor (corregido: usar transaction__date en lugar de created_at)
         payment_qs = (
-            AccountMethodAmount.objects.filter(created_at__date__range=(start_date, end_date))
-            .annotate(date=TruncDate('created_at'))
+            AccountMethodAmount.objects.filter(transaction__date__date__range=(start_date, end_date))
+            .annotate(date=TruncDate('transaction__date'))
             .values('date', 'credit__seller__user__first_name', 'credit__subcategory__name')
             .annotate(
                 payments=Sum('amount_paid')
@@ -295,5 +295,3 @@ class SellerChartDataAPIView(APIView):
         # Convertir a lista ordenada por fecha
         data = sorted(data_dict.values(), key=lambda x: x['date'])
         return Response(data)
-
-
