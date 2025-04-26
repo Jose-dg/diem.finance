@@ -5,8 +5,11 @@ from django.db.models import Sum
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
-
-from apps.fintech.models import Credit
+from apps.fintech.models import Credit, Transaction
+from decimal import Decimal
+from django.db import transaction
+from django.db.models import Sum
+import math
 
 def calculate_credit_morosity(credit):
     """
@@ -83,44 +86,76 @@ def evaluate_morosidad(credit):
     return is_in_default, level
 
 @transaction.atomic
-def recalculate_credit(uuid):
-   credit = None
+def recalculate_credit(credit):
+    today = timezone.now().date()
 
-   try:
-        credit = Credit.objects.select_related('periodicity').get(uid=uuid)
-   except Credit.DoesNotExist:
-        return None
-
-    # 1. Calcular intereses adicionales
-   total_interest_additions = credit.additional_interests.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    # 1. Sumar abonos de transacciones confirmadas
+    total_abonos = Transaction.objects.filter(  # <-- Aquí estaba el error, ahora es .objects
+        account_method_amounts__credit=credit,
+        transaction_type='income',
+        status='confirmed'
+    ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
 
     # 2. Recalcular earnings e interés
-   cost = Decimal(credit.cost)
-   price = Decimal(credit.price)
-   credit_days = Decimal(credit.credit_days)
-   periodicity_days = Decimal(credit.periodicity.days) if credit.periodicity else Decimal(1)
+    cost = Decimal(credit.cost)
+    price = Decimal(credit.price)
+    credit_days = Decimal(credit.credit_days)
+    periodicity_days = Decimal(credit.periodicity.days) if credit.periodicity and credit.periodicity.days else Decimal(1)
 
-   credit.earnings = price - cost
-   if cost and price and credit_days:
+    credit.earnings = price - cost
+    if cost and price and credit_days:
         credit.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
 
-   # 3. Recalcular cuotas
-   if periodicity_days and credit_days:
-      installment_number = math.ceil(credit_days / periodicity_days)
-      credit.installment_number = installment_number
-      
-      if installment_number > 0:
-         credit.installment_value = (price / Decimal(installment_number)).quantize(Decimal('.01'))
-      else:
-         credit.installment_value = price
+    # 3. Cuotas
+    if periodicity_days and credit_days:
+        installment_number = math.ceil(credit_days / periodicity_days)
+        credit.installment_number = installment_number
 
-    # 4. Recalcular pending amount incluyendo intereses y abonos
-   credit.pending_amount = (price + total_interest_additions) - credit.total_abonos
+        if installment_number > 0:
+            credit.installment_value = (price / Decimal(installment_number)).quantize(Decimal('.01'))
+        else:
+            credit.installment_value = price
 
-    # 5. Recalcular morosidad
-   credit.is_in_default, credit.morosidad_level = evaluate_morosidad(credit)
+    # 4. Calculamos el pending amount
+    pending = price - total_abonos
+    credit.total_abonos = total_abonos
+    credit.pending_amount = pending
 
-   credit.updated_at = timezone.now()
-   credit.save()
-   return credit
+    # 5. Morosidad y estado
+    last_payment = Transaction.objects.filter(  # <-- También aquí
+        account_method_amounts__credit=credit,
+        transaction_type='income',
+        status='confirmed'
+    ).order_by('-date').first()
 
+    last_payment_date = last_payment.date.date() if last_payment else credit.first_date_payment
+
+    if pending <= 0.01:
+        credit.morosidad_level = 'on_time'
+        credit.is_in_default = False
+        credit.state = 'completed'
+        credit.pending_amount = 0  # Normalizamos
+    else:
+        days_since_last_payment = (today - last_payment_date).days
+        delay_ratio = days_since_last_payment / periodicity_days
+
+        if delay_ratio < 1:
+            morosidad = 'on_time'
+        elif delay_ratio < 2:
+            morosidad = 'mild_default'
+        elif delay_ratio < 3:
+            morosidad = 'moderate_default'
+        elif delay_ratio < 4:
+            morosidad = 'severe_default'
+        elif delay_ratio < 5:
+            morosidad = 'recurrent_default'
+        else:
+            morosidad = 'critical_default'
+
+        credit.morosidad_level = morosidad
+        credit.is_in_default = morosidad != 'on_time'
+
+    credit.updated_at = timezone.now()
+    credit.save()
+
+    return credit

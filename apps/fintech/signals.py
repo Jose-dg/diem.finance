@@ -2,7 +2,7 @@ from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 
 from apps.fintech.utils import recalculate_credit
-from .models import Transaction, AccountMethodAmount, Credit
+from .models import CreditAdjustment, Transaction, AccountMethodAmount, Credit
 from datetime import datetime
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -64,17 +64,6 @@ def create_transaction_and_account_method(sender, instance, created, **kwargs):
             transaction=transaction  
         )
 
-# @receiver(post_save, sender=Transaction)
-# def handle_transaction_save(sender, instance, **kwargs):
-#     """
-#     Recalcula el crédito completo al guardar una transacción confirmada de ingreso.
-#     """
-#     if instance.transaction_type != 'income' or instance.status != 'confirmed':
-#         return
-
-#     if instance.credit:
-#         recalculate_credit(instance.credit.uid)
-
 @receiver(post_save, sender=Transaction)
 def handle_transaction_save(sender, instance, **kwargs):
     """
@@ -101,3 +90,19 @@ def handle_transaction_delete(sender, instance, **kwargs):
     """
     if instance.credit:
         recalculate_credit(instance.credit.uid)
+    
+@receiver(post_save, sender=CreditAdjustment)
+def handle_credit_adjustment_save(sender, instance, created, **kwargs):
+    """
+    Cuando se crea o actualiza un CreditAdjustment, recalculamos el crédito asociado.
+    """
+    if instance.credit:
+        recalculate_credit(instance.credit)
+
+@receiver(post_delete, sender=CreditAdjustment)
+def handle_credit_adjustment_delete(sender, instance, **kwargs):
+    """
+    Cuando se elimina un CreditAdjustment, recalculamos el crédito asociado.
+    """
+    if instance.credit:
+        recalculate_credit(instance.credit)
