@@ -8,8 +8,10 @@ from django.db import transaction
 from apps.fintech.models import Credit, Transaction
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import Sum
-import math
+from decimal import Decimal
+from django.db import transaction
+
+from apps.fintech.models import Transaction  # Asegúrate de importar correctamente
 
 def calculate_credit_morosity(credit):
     """
@@ -90,13 +92,18 @@ def recalculate_credit(credit):
     today = timezone.now().date()
 
     # 1. Sumar abonos de transacciones confirmadas
-    total_abonos = Transaction.objects.filter(  # <-- Aquí estaba el error, ahora es .objects
+    total_abonos = Transaction.objects.filter(
         account_method_amounts__credit=credit,
         transaction_type='income',
         status='confirmed'
     ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
 
-    # 2. Recalcular earnings e interés
+    # 2. Sumar o restar ajustes de intereses adicionales
+    total_adjustments = credit.adjustments.aggregate(
+        total=Sum('amount')
+    )['total'] or Decimal('0.00')
+
+    # 3. Recalcular earnings e interés
     cost = Decimal(credit.cost)
     price = Decimal(credit.price)
     credit_days = Decimal(credit.credit_days)
@@ -106,7 +113,7 @@ def recalculate_credit(credit):
     if cost and price and credit_days:
         credit.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
 
-    # 3. Cuotas
+    # 4. Cuotas
     if periodicity_days and credit_days:
         installment_number = math.ceil(credit_days / periodicity_days)
         credit.installment_number = installment_number
@@ -116,13 +123,13 @@ def recalculate_credit(credit):
         else:
             credit.installment_value = price
 
-    # 4. Calculamos el pending amount
-    pending = price - total_abonos
+    # 5. Calculamos el pending amount ajustado
+    pending = (price + total_adjustments) - total_abonos
     credit.total_abonos = total_abonos
     credit.pending_amount = pending
 
-    # 5. Morosidad y estado
-    last_payment = Transaction.objects.filter(  # <-- También aquí
+    # 6. Morosidad y estado
+    last_payment = Transaction.objects.filter(
         account_method_amounts__credit=credit,
         transaction_type='income',
         status='confirmed'
