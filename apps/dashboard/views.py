@@ -58,8 +58,14 @@ class CreditsAPIView(APIView):
 
         # Filtrar créditos con estado "pending"
         pending_credits = all_credits.filter(state="pending").order_by('-created_at')
+        
+        # Obtener hasta dos créditos con estado "completed"
+        completed_credits = all_credits.filter(state="completed").order_by('-created_at')[:2]
 
-        return Response(CreditSerializer(pending_credits, many=True).data)
+        # Combinar ambos queryset
+        combined_credits = list(pending_credits) + list(completed_credits)
+
+        return Response(CreditSerializer(combined_credits, many=True).data)
 
 # class SortedCreditsByLabelAPIView(APIView):
 #     def post(self, request, *args, **kwargs):

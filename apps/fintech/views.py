@@ -2,7 +2,7 @@ from decimal import Decimal
 import uuid
 from rest_framework import viewsets
 
-from apps.fintech.utils import calculate_credit_morosity, recalculate_credit_pending_amount
+from apps.fintech.utils import calculate_credit_morosity, recalculate_credit_pending_amount, recalculate_credit
 from .models import ( 
    User, 
    Account, 
@@ -160,3 +160,34 @@ class RecalculateCreditPendingAmountView(APIView):
             "message": "Saldos pendientes recalculados",
             "credits": recalculated_credits,
         }, status=status.HTTP_200_OK)
+
+class RecalculateCreditView(APIView):
+    """
+    Recalcula abonos, pendientes y morosidad de un crédito específico.
+    """
+    def post(self, request, *args, **kwargs):
+        uid = request.data.get('uid')
+
+        if not uid:
+            return Response(
+                {"error": "Debes proporcionar un UUID en el body."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            credit = Credit.objects.get(uid=uid)
+            recalculate_credit(credit)
+            return Response(
+                {"message": f"✅ Crédito {credit.uid} recalculado exitosamente."},
+                status=status.HTTP_200_OK
+            )
+        except Credit.DoesNotExist:
+            return Response(
+                {"error": "Crédito no encontrado."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Error al recalcular: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

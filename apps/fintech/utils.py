@@ -8,8 +8,9 @@ from django.db import transaction
 from apps.fintech.models import Credit, Transaction
 from decimal import Decimal
 from django.db import transaction
-from decimal import Decimal
-from django.db import transaction
+from decimal import Decimal, ROUND_HALF_UP
+import math
+from apps.fintech.models import Credit, Transaction
 
 from apps.fintech.models import Transaction  # Asegúrate de importar correctamente
 
@@ -87,10 +88,193 @@ def evaluate_morosidad(credit):
 
     return is_in_default, level
 
+# @transaction.atomic
+# def recalculate_credit(credit):
+#     today = timezone.now().date()
+
+#     # 1. Sumar abonos de transacciones confirmadas
+#     total_abonos = Transaction.objects.filter(
+#         account_method_amounts__credit=credit,
+#         transaction_type='income',
+#         status='confirmed'
+#     ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
+
+#     # 2. Sumar o restar ajustes de intereses adicionales
+#     total_adjustments = credit.adjustments.aggregate(
+#         total=Sum('amount')
+#     )['total'] or Decimal('0.00')
+
+#     # 3. Recalcular earnings e interés
+#     cost = Decimal(credit.cost)
+#     price = Decimal(credit.price)
+#     credit_days = Decimal(credit.credit_days)
+#     periodicity_days = Decimal(credit.periodicity.days) if credit.periodicity and credit.periodicity.days else Decimal(1)
+
+#     credit.earnings = price - cost
+#     if cost and price and credit_days:
+#         credit.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
+
+#     # 4. Cuotas
+#     if periodicity_days and credit_days:
+#         installment_number = math.ceil(credit_days / periodicity_days)
+#         credit.installment_number = installment_number
+
+#         if installment_number > 0:
+#             credit.installment_value = (price / Decimal(installment_number)).quantize(Decimal('.01'))
+#         else:
+#             credit.installment_value = price
+
+#     # 5. Calculamos el pending amount ajustado
+#     pending = (price + total_adjustments) - total_abonos
+#     credit.total_abonos = total_abonos
+#     credit.pending_amount = pending
+
+#     # 6. Morosidad y estado
+#     last_payment = Transaction.objects.filter(
+#         account_method_amounts__credit=credit,
+#         transaction_type='income',
+#         status='confirmed'
+#     ).order_by('-date').first()
+
+#     last_payment_date = last_payment.date.date() if last_payment else credit.first_date_payment
+
+#     if pending <= 0.01:
+#         credit.morosidad_level = 'on_time'
+#         credit.is_in_default = False
+#         credit.state = 'completed'
+#         credit.pending_amount = 0  # Normalizamos
+#     else:
+#         days_since_last_payment = (today - last_payment_date).days
+#         delay_ratio = days_since_last_payment / periodicity_days
+
+#         if delay_ratio < 1:
+#             morosidad = 'on_time'
+#         elif delay_ratio < 2:
+#             morosidad = 'mild_default'
+#         elif delay_ratio < 3:
+#             morosidad = 'moderate_default'
+#         elif delay_ratio < 4:
+#             morosidad = 'severe_default'
+#         elif delay_ratio < 5:
+#             morosidad = 'recurrent_default'
+#         else:
+#             morosidad = 'critical_default'
+
+#         credit.morosidad_level = morosidad
+#         credit.is_in_default = morosidad != 'on_time'
+
+#     credit.updated_at = timezone.now()
+#     credit.save()
+
+#     return credit
+
+from django.db import transaction
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
+import math
+from apps.fintech.models import Credit, Transaction
+
+# @transaction.atomic
+# def recalculate_credit(credit):
+#     today = timezone.now().date()
+
+#     # 1. Sumar abonos de transacciones confirmadas
+#     total_abonos = Transaction.objects.filter(
+#         account_method_amounts__credit=credit,
+#         transaction_type='income',
+#         status='confirmed'
+#     ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
+
+#     # 2. Sumar o restar ajustes de intereses adicionales
+#     total_adjustments = credit.adjustments.aggregate(
+#         total=Sum('amount')
+#     )['total'] or Decimal('0.00')
+
+#     # 3. Recalcular earnings e interés
+#     cost = Decimal(credit.cost)
+#     price = Decimal(credit.price)
+#     credit_days = Decimal(credit.credit_days)
+#     periodicity_days = Decimal(credit.periodicity.days) if credit.periodicity and credit.periodicity.days else Decimal(1)
+
+#     credit.earnings = price - cost
+#     if cost and price and credit_days:
+#         credit.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
+
+#     # 4. Cuotas
+#     if periodicity_days and credit_days:
+#         installment_number = math.ceil(credit_days / periodicity_days)
+#         credit.installment_number = installment_number
+
+#         if installment_number > 0:
+#             credit.installment_value = (price / Decimal(installment_number)).quantize(Decimal('.01'))
+#         else:
+#             credit.installment_value = price
+
+#     # 5. Calculamos el pending amount ajustado
+#     pending = (price + total_adjustments) - total_abonos
+#     credit.total_abonos = total_abonos
+#     credit.pending_amount = pending
+
+#     # 6. Morosidad y estado (Recalculando correctamente)
+#     first_date_payment = credit.first_date_payment
+#     if not first_date_payment:
+#         first_date_payment = today  # Si no tiene, asumimos hoy
+
+#     # Calculamos cuántos periodos de pago deberían haberse cumplido
+#     periods_passed = max((today - first_date_payment).days // periodicity_days, 0)
+#     expected_payments = periods_passed * credit.installment_value
+
+#     if pending <= 0.01:
+#         credit.morosidad_level = 'on_time'
+#         credit.is_in_default = False
+#         credit.state = 'completed'  # Pago completo, finalizado.
+#     else:
+#         # Calcular morosidad basado en pagos esperados
+#         if total_abonos >= expected_payments:
+#             morosidad = 'on_time'
+#         else:
+#             overdue_periods = (expected_payments - total_abonos) / credit.installment_value
+#             if overdue_periods < 1:
+#                 morosidad = 'mild_default'
+#             elif overdue_periods < 2:
+#                 morosidad = 'moderate_default'
+#             elif overdue_periods < 3:
+#                 morosidad = 'severe_default'
+#             elif overdue_periods < 4:
+#                 morosidad = 'recurrent_default'
+#             else:
+#                 morosidad = 'critical_default'
+
+#         credit.morosidad_level = morosidad
+#         credit.is_in_default = morosidad != 'on_time'
+
+#         # Ajustamos el estado basado en morosidad
+#         if credit.is_in_default:
+#             credit.state = 'in_default'
+#         else:
+#             credit.state = 'pending'  # El crédito está pendiente, no completado.
+
+#     credit.updated_at = timezone.now()
+#     credit.save()
+
+#     return credit
+
+from django.db import transaction
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
+import math
+from apps.fintech.models import Credit, Transaction
+
+from django.db import transaction
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
+import math
+from apps.fintech.models import Credit, Transaction
+
 @transaction.atomic
 def recalculate_credit(credit):
     today = timezone.now().date()
-
+    
     # 1. Sumar abonos de transacciones confirmadas
     total_abonos = Transaction.objects.filter(
         account_method_amounts__credit=credit,
@@ -128,41 +312,89 @@ def recalculate_credit(credit):
     credit.total_abonos = total_abonos
     credit.pending_amount = pending
 
-    # 6. Morosidad y estado
-    last_payment = Transaction.objects.filter(
+    # 6. Generar fechas esperadas de pago según periodicidad
+    first_date_payment = credit.first_date_payment
+    second_date_payment = credit.second_date_payment
+
+    payment_dates = generate_payment_dates(first_date_payment, second_date_payment, periodicity_days, today)
+
+    # 7. Verificar pagos realizados en las fechas esperadas
+    payments_made = Transaction.objects.filter(
         account_method_amounts__credit=credit,
         transaction_type='income',
         status='confirmed'
-    ).order_by('-date').first()
+    ).values_list('date', flat=True).distinct()
 
-    last_payment_date = last_payment.date.date() if last_payment else credit.first_date_payment
+    missed_dates = [date for date in payment_dates if date <= today and date not in payments_made]
 
-    if pending <= 0.01:
+    # 8. Determinar morosidad basado en fechas perdidas
+    if not missed_dates:
         credit.morosidad_level = 'on_time'
         credit.is_in_default = False
-        credit.state = 'completed'
-        credit.pending_amount = 0  # Normalizamos
+        credit.state = 'completed' if pending <= 0.01 else 'pending'
     else:
-        days_since_last_payment = (today - last_payment_date).days
-        delay_ratio = days_since_last_payment / periodicity_days
-
-        if delay_ratio < 1:
-            morosidad = 'on_time'
-        elif delay_ratio < 2:
+        missed_count = len(missed_dates)
+        if missed_count == 1:
             morosidad = 'mild_default'
-        elif delay_ratio < 3:
+        elif missed_count == 2:
             morosidad = 'moderate_default'
-        elif delay_ratio < 4:
+        elif missed_count == 3:
             morosidad = 'severe_default'
-        elif delay_ratio < 5:
+        elif missed_count == 4:
             morosidad = 'recurrent_default'
         else:
             morosidad = 'critical_default'
 
         credit.morosidad_level = morosidad
-        credit.is_in_default = morosidad != 'on_time'
+        credit.is_in_default = True
+
+        # Si hay saldo pendiente, el estado será siempre "pending"
+        credit.state = 'pending' if pending > 0 else 'completed'
 
     credit.updated_at = timezone.now()
     credit.save()
-
     return credit
+
+
+# def generate_payment_dates(first_date, second_date, periodicity_days, today):
+#     dates = []
+#     current_date = first_date
+
+#     while current_date <= today:
+#         dates.append(current_date)
+#         if periodicity_days == 7:
+#             current_date += timezone.timedelta(days=7)
+#         elif periodicity_days == 15:
+#             next_day = second_date if current_date == first_date else first_date + timezone.timedelta(days=15)
+#             if next_day > today:
+#                 break
+#             dates.append(next_day)
+#             current_date += timezone.timedelta(days=15)
+#         elif periodicity_days == 30:
+#             current_date += timezone.timedelta(days=30)
+#         else:
+#             current_date += timezone.timedelta(days=periodicity_days)
+
+#     return dates
+
+def generate_payment_dates(first_date, second_date, periodicity_days, today):
+    dates = []
+    current_date = first_date
+    periodicity_days = int(periodicity_days)  # Convertimos a entero directamente
+
+    while current_date <= today:
+        dates.append(current_date)
+        if periodicity_days == 7:
+            current_date += timezone.timedelta(days=7)
+        elif periodicity_days == 15:
+            next_day = second_date if current_date == first_date else first_date + timezone.timedelta(days=15)
+            if next_day > today:
+                break
+            dates.append(next_day)
+            current_date += timezone.timedelta(days=15)
+        elif periodicity_days == 30:
+            current_date += timezone.timedelta(days=30)
+        else:
+            current_date += timezone.timedelta(days=periodicity_days)
+
+    return dates
