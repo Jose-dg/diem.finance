@@ -14,9 +14,8 @@ from rest_framework import status
 from django.utils import timezone
 from django.db.models.functions import TruncDate
 from django.db.models.functions import Trunc
-from pytz import timezone  # Importante para definir la zona horaria
+from pytz import timezone
 
-# Vista para obtener clientes con morosidad
 class ClientsWithDefaultAPIView(APIView):
     def post(self, request, *args, **kwargs):
         credits = Credit.objects.filter(
@@ -67,34 +66,9 @@ class CreditsAPIView(APIView):
         # Combinar ambos queryset
         combined_credits = list(pending_credits) + list(completed_credits)
 
+        print(combined_credits)
+
         return Response(CreditSerializer(combined_credits, many=True).data)
-
-# class SortedCreditsByLabelAPIView(APIView):
-#     def post(self, request, *args, **kwargs):
-#         from datetime import datetime, time
-#         from django.utils.timezone import make_aware
-
-#         start_raw = request.data.get('start_date')
-#         end_raw = request.data.get('end_date')
-
-#         if not start_raw or not end_raw:
-#             return Response(
-#                 {"error": "start_date and end_date are required."},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-
-#         start_date = make_aware(datetime.combine(parse_date(start_raw), time.min))
-#         end_date = make_aware(datetime.combine(parse_date(end_raw), time.max))
-
-#         credits = Credit.objects.filter(
-#             created_at__range=[start_date, end_date],
-#             state="pending"
-#         ).select_related('user__label').order_by(
-#             F('user__label__name').asc(nulls_last=True),
-#             '-created_at'
-#         )
-
-#         return Response(CreditSimpleSerializer(credits, many=True).data)
 
 class SortedCreditsByLabelAPIView(APIView):
     def post(self, request, *args, **kwargs):
@@ -316,85 +290,6 @@ class SellerChartDataAPIView(APIView):
         # Convertir a lista ordenada por fecha
         data = sorted(data_dict.values(), key=lambda x: x['date'])
         return Response(data)
-
-
-# class SellerChartDataAPIView(APIView):
-#     # permission_classes = [IsAuthenticated]  # Desactivado temporalmente
-
-#     def post(self, request):
-#         # Obtener rango de fechas desde el body (últimos 90 días por defecto)
-#         range_days = int(request.data.get("range", 90))
-#         seller_id = request.data.get("seller_id")
-#         subcategory_id = request.data.get("subcategory_id")
-
-#         end_date = now().date()
-#         start_date = end_date - timedelta(days=range_days)
-
-#         credit_filters = {'created_at__date__range': (start_date, end_date)}
-#         if seller_id:
-#             credit_filters['seller_id'] = seller_id
-#         if subcategory_id:
-#             credit_filters['subcategory_id'] = subcategory_id
-
-#         credit_qs = (
-#             Credit.objects.filter(**credit_filters)
-#             .annotate(date=TruncDate('created_at'))
-#             .values('date')
-#             .annotate(
-#                 credits=Count('id'),
-#                 earnings=Sum('earnings'),
-#             )
-#         )
-
-#         payment_filters = {'transaction__date__date__range': (start_date, end_date)}
-#         if seller_id:
-#             payment_filters['credit__seller_id'] = seller_id
-#         if subcategory_id:
-#             payment_filters['credit__subcategory_id'] = subcategory_id
-
-#         payment_qs = (
-#             AccountMethodAmount.objects.filter(**payment_filters)
-#             .annotate(date=TruncDate('transaction__date'))
-#             .values('date')
-#             .annotate(
-#                 payments=Sum('amount_paid')
-#             )
-#         )
-
-#         # Unificar resultados en un solo diccionario agrupado por fecha
-#         data_dict = {}
-
-#         for row in credit_qs:
-#             key = row['date']
-#             data_dict.setdefault(key, {'date': key, 'credits': 0, 'payments': 0, 'earnings': 0})
-#             data_dict[key]['credits'] += row['credits']
-#             data_dict[key]['earnings'] += float(row['earnings'] or 0)
-
-#         for row in payment_qs:
-#             key = row['date']
-#             data_dict.setdefault(key, {'date': key, 'credits': 0, 'payments': 0, 'earnings': 0})
-#             data_dict[key]['payments'] += float(row['payments'] or 0)
-
-#         # Convertir a lista ordenada por fecha
-#         data = sorted(data_dict.values(), key=lambda x: x['date'])
-#         return Response(data)
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.utils.timezone import now
-from datetime import timedelta
-from django.db.models import Sum
-from django.db.models.functions import TruncMonth
-from pytz import timezone
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.utils.timezone import now
-from datetime import timedelta
-from django.db.models import Sum
-from django.db.models.functions import TruncMonth
-from pytz import timezone
-from collections import defaultdict
 
 class MonthlyChartDataAPIView(APIView):
     def post(self, request):
