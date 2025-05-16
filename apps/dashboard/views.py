@@ -379,50 +379,77 @@ class SellerChartDataAPIView(APIView):
 #         data = sorted(data_dict.values(), key=lambda x: x['date'])
 #         return Response(data)
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.utils.timezone import now
+from datetime import timedelta
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
+from pytz import timezone
 
-    # permission_classes = [IsAuthenticated]  # Desactivado temporalmente
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.utils.timezone import now
+from datetime import timedelta
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
+from pytz import timezone
+from collections import defaultdict
 
+class MonthlyChartDataAPIView(APIView):
     def post(self, request):
-        # Obtener rango de fechas desde el body (últimos 90 días por defecto)
-        range_days = int(request.data.get("range", 90))
+        range_months = int(request.data.get("months", 6))
+        seller_id = request.data.get("seller_id")
+        subcategory_id = request.data.get("subcategory_id")
+
         end_date = now().date()
-        start_date = end_date - timedelta(days=range_days)
+        start_date = end_date - timedelta(days=range_months * 30)
 
-        # Créditos entregados por vendedor
-        credit_qs = (
-            Credit.objects.filter(created_at__date__range=(start_date, end_date))
-            .annotate(date=TruncDate('created_at'))
-            .values('date', 'seller__user__first_name', 'subcategory__name')
+        credit_filters = {"created_at__date__range": (start_date, end_date)}
+        if seller_id:
+            credit_filters["seller_id"] = seller_id
+        if subcategory_id:
+            credit_filters["subcategory_id"] = subcategory_id
+
+        credits = (
+            Credit.objects.filter(**credit_filters)
+            .annotate(month=TruncMonth("created_at", tzinfo=timezone("America/Bogota")))
+            .values("month")
             .annotate(
-                credits=Count('id'),
-                earnings=Sum('earnings'),
+                total_credit=Sum("price"),
+                earnings=Sum("earnings"),
             )
         )
 
-        # Pagos realizados por vendedor (corregido: usar transaction__date en lugar de created_at)
-        payment_qs = (
-            AccountMethodAmount.objects.filter(transaction__date__date__range=(start_date, end_date))
-            .annotate(date=TruncDate('transaction__date'))
-            .values('date', 'credit__seller__user__first_name', 'credit__subcategory__name')
+        payment_filters = {"transaction__date__date__range": (start_date, end_date)}
+        if seller_id:
+            payment_filters["credit__seller_id"] = seller_id
+        if subcategory_id:
+            payment_filters["credit__subcategory_id"] = subcategory_id
+
+        payments = (
+            AccountMethodAmount.objects.filter(**payment_filters)
+            .annotate(month=TruncMonth("transaction__date", tzinfo=timezone("America/Bogota")))
+            .values("month")
             .annotate(
-                payments=Sum('amount_paid')
+                payments=Sum("amount_paid")
             )
         )
 
-        # Unificar resultados en un solo diccionario agrupado por fecha, vendedor y tipo de crédito
-        data_dict = {}
+        # Agrupación por mes con formato "YYYY-MM"
+        data_dict = defaultdict(lambda: {"month": "", "credits": 0, "payments": 0, "earnings": 0})
 
-        for row in credit_qs:
-            key = (row['date'], row['seller__user__first_name'], row['subcategory__name'])
-            data_dict.setdefault(key, {'date': row['date'], 'seller': row['seller__user__first_name'], 'credit_type': row['subcategory__name'], 'credits': 0, 'payments': 0, 'earnings': 0})
-            data_dict[key]['credits'] = row['credits']
-            data_dict[key]['earnings'] = float(row['earnings'] or 0)
+        for row in credits:
+            month_str = row["month"].strftime("%Y-%m")
+            data_dict[month_str]["month"] = month_str
+            data_dict[month_str]["credits"] += float(row["total_credit"] or 0)
+            data_dict[month_str]["earnings"] += float(row["earnings"] or 0)
 
-        for row in payment_qs:
-            key = (row['date'], row['credit__seller__user__first_name'], row['credit__subcategory__name'])
-            data_dict.setdefault(key, {'date': row['date'], 'seller': row['credit__seller__user__first_name'], 'credit_type': row['credit__subcategory__name'], 'credits': 0, 'payments': 0, 'earnings': 0})
-            data_dict[key]['payments'] = float(row['payments'] or 0)
+        for row in payments:
+            month_str = row["month"].strftime("%Y-%m")
+            data_dict[month_str]["month"] = month_str
+            data_dict[month_str]["payments"] += float(row["payments"] or 0)
 
-        # Convertir a lista ordenada por fecha
-        data = sorted(data_dict.values(), key=lambda x: x['date'])
+        # Convertir a lista ordenada por mes
+        data = sorted(data_dict.values(), key=lambda x: x["month"])
         return Response(data)

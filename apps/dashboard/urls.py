@@ -5,7 +5,8 @@ from .views import (
    SellerChartDataAPIView,
    TransactionsAPIView, 
    ClientsWithDefaultAPIView,
-   SortedCreditsByLabelAPIView
+   SortedCreditsByLabelAPIView,
+   MonthlyChartDataAPIView
    )
 
 urlpatterns = [
@@ -16,6 +17,7 @@ urlpatterns = [
     # Rutas para APIViews
     path('data/', FinanceView.as_view(), name='finance-summary'),
     path('sheet/', SortedCreditsByLabelAPIView.as_view(), name='creditw'),
-    path("chart/sellers/", SellerChartDataAPIView.as_view(), name="chart-sellers")
+    path("chart/sellers/", SellerChartDataAPIView.as_view(), name="chart-sellers"),
+    path("chart/monthly/", MonthlyChartDataAPIView.as_view(), name="monthly-chart-data")
 ]
 
