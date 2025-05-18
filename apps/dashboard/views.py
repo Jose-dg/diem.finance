@@ -310,60 +310,142 @@ class SellerChartDataAPIView(APIView):
         data = sorted(data_dict.values(), key=lambda x: x['date'])
         return Response(data)
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.utils.timezone import now, make_aware
+from django.utils.dateparse import parse_date
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
+from collections import defaultdict
+from datetime import datetime, timedelta, time
+from pytz import timezone
+from apps.fintech.models import Credit, AccountMethodAmount
+
 class MonthlyChartDataAPIView(APIView):
     def post(self, request):
-        range_months = int(request.data.get("months", 6))
-        seller_id = request.data.get("seller_id")
-        subcategory_id = request.data.get("subcategory_id")
+        try:
+            # Obtener parámetros del request
+            range_months = int(request.data.get("months", 6))
+            seller_id = request.data.get("seller_id")
+            subcategory_id = request.data.get("subcategory_id")
 
-        end_date = now().date()
-        start_date = end_date - timedelta(days=range_months * 30)
-
-        credit_filters = {"created_at__date__range": (start_date, end_date)}
-        if seller_id:
-            credit_filters["seller_id"] = seller_id
-        if subcategory_id:
-            credit_filters["subcategory_id"] = subcategory_id
-
-        credits = (
-            Credit.objects.filter(**credit_filters)
-            .annotate(month=TruncMonth("created_at", tzinfo=timezone("America/Bogota")))
-            .values("month")
-            .annotate(
-                total_credit=Sum("price"),
-                earnings=Sum("earnings"),
+            # Calcular fechas aware
+            tz = timezone("America/Bogota")
+            end_date = make_aware(datetime.combine(now().date(), time.max), timezone=tz)
+            start_date = make_aware(
+                datetime.combine(end_date.date() - timedelta(days=range_months * 30), time.min),
+                timezone=tz,
             )
-        )
 
-        payment_filters = {"transaction__date__date__range": (start_date, end_date)}
-        if seller_id:
-            payment_filters["credit__seller_id"] = seller_id
-        if subcategory_id:
-            payment_filters["credit__subcategory_id"] = subcategory_id
+            # Filtros para créditos
+            credit_filters = {"created_at__range": (start_date, end_date)}
+            if seller_id:
+                credit_filters["seller_id"] = seller_id
+            if subcategory_id:
+                credit_filters["subcategory_id"] = subcategory_id
 
-        payments = (
-            AccountMethodAmount.objects.filter(**payment_filters)
-            .annotate(month=TruncMonth("transaction__date", tzinfo=timezone("America/Bogota")))
-            .values("month")
-            .annotate(
-                payments=Sum("amount_paid")
+            credits = (
+                Credit.objects.filter(**credit_filters)
+                .annotate(month=TruncMonth("created_at", tzinfo=tz))
+                .values("month")
+                .annotate(
+                    total_credit=Sum("price"),
+                    earnings=Sum("earnings"),
+                )
             )
-        )
 
-        # Agrupación por mes con formato "YYYY-MM"
-        data_dict = defaultdict(lambda: {"month": "", "credits": 0, "payments": 0, "earnings": 0})
+            # Filtros para pagos
+            payment_filters = {"transaction__date__range": (start_date, end_date)}
+            if seller_id:
+                payment_filters["credit__seller_id"] = seller_id
+            if subcategory_id:
+                payment_filters["credit__subcategory_id"] = subcategory_id
 
-        for row in credits:
-            month_str = row["month"].strftime("%Y-%m")
-            data_dict[month_str]["month"] = month_str
-            data_dict[month_str]["credits"] += float(row["total_credit"] or 0)
-            data_dict[month_str]["earnings"] += float(row["earnings"] or 0)
+            payments = (
+                AccountMethodAmount.objects.filter(**payment_filters)
+                .annotate(month=TruncMonth("transaction__date", tzinfo=tz))
+                .values("month")
+                .annotate(
+                    payments=Sum("amount_paid")
+                )
+            )
 
-        for row in payments:
-            month_str = row["month"].strftime("%Y-%m")
-            data_dict[month_str]["month"] = month_str
-            data_dict[month_str]["payments"] += float(row["payments"] or 0)
+            # Agrupar datos por mes
+            data_dict = defaultdict(lambda: {"month": "", "credits": 0, "payments": 0, "earnings": 0})
 
-        # Convertir a lista ordenada por mes
-        data = sorted(data_dict.values(), key=lambda x: x["month"])
-        return Response(data)
+            for row in credits:
+                month_str = row["month"].strftime("%Y-%m")
+                data_dict[month_str]["month"] = month_str
+                data_dict[month_str]["credits"] += float(row["total_credit"] or 0)
+                data_dict[month_str]["earnings"] += float(row["earnings"] or 0)
+
+            for row in payments:
+                month_str = row["month"].strftime("%Y-%m")
+                data_dict[month_str]["month"] = month_str
+                data_dict[month_str]["payments"] += float(row["payments"] or 0)
+
+            # Devolver los datos ordenados por mes
+            data = sorted(data_dict.values(), key=lambda x: x["month"])
+            return Response(data)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+# class MonthlyChartDataAPIView(APIView):
+#     def post(self, request):
+#         range_months = int(request.data.get("months", 6))
+#         seller_id = request.data.get("seller_id")
+#         subcategory_id = request.data.get("subcategory_id")
+
+#         end_date = now().date()
+#         start_date = end_date - timedelta(days=range_months * 30)
+
+#         credit_filters = {"created_at__date__range": (start_date, end_date)}
+#         if seller_id:
+#             credit_filters["seller_id"] = seller_id
+#         if subcategory_id:
+#             credit_filters["subcategory_id"] = subcategory_id
+
+#         credits = (
+#             Credit.objects.filter(**credit_filters)
+#             .annotate(month=TruncMonth("created_at", tzinfo=timezone("America/Bogota")))
+#             .values("month")
+#             .annotate(
+#                 total_credit=Sum("price"),
+#                 earnings=Sum("earnings"),
+#             )
+#         )
+
+#         payment_filters = {"transaction__date__date__range": (start_date, end_date)}
+#         if seller_id:
+#             payment_filters["credit__seller_id"] = seller_id
+#         if subcategory_id:
+#             payment_filters["credit__subcategory_id"] = subcategory_id
+
+#         payments = (
+#             AccountMethodAmount.objects.filter(**payment_filters)
+#             .annotate(month=TruncMonth("transaction__date", tzinfo=timezone("America/Bogota")))
+#             .values("month")
+#             .annotate(
+#                 payments=Sum("amount_paid")
+#             )
+#         )
+
+#         # Agrupación por mes con formato "YYYY-MM"
+#         data_dict = defaultdict(lambda: {"month": "", "credits": 0, "payments": 0, "earnings": 0})
+
+#         for row in credits:
+#             month_str = row["month"].strftime("%Y-%m")
+#             data_dict[month_str]["month"] = month_str
+#             data_dict[month_str]["credits"] += float(row["total_credit"] or 0)
+#             data_dict[month_str]["earnings"] += float(row["earnings"] or 0)
+
+#         for row in payments:
+#             month_str = row["month"].strftime("%Y-%m")
+#             data_dict[month_str]["month"] = month_str
+#             data_dict[month_str]["payments"] += float(row["payments"] or 0)
+
+#         # Convertir a lista ordenada por mes
+#         data = sorted(data_dict.values(), key=lambda x: x["month"])
+#         return Response(data)
