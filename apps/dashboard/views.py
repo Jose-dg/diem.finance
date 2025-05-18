@@ -7,7 +7,7 @@ from apps.fintech.serializers import CreditSerializer, CreditSimpleSerializer, T
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now
 from django.db.models import Sum, Count, F
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -54,21 +54,50 @@ class CreditsAPIView(APIView):
         if not start_date or not end_date:
             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Obtener todos los créditos dentro del rango de fechas
-        all_credits = Credit.objects.filter(created_at__range=[start_date, end_date])
+        # Ajustar a rango de día completo
+        start_datetime = datetime.combine(start_date, time.min)  # 00:00:00
+        end_datetime = datetime.combine(end_date, time.max)      # 23:59:59
 
-        # Filtrar créditos con estado "pending"
+        # Obtener todos los créditos dentro del rango de fechas
+        all_credits = Credit.objects.filter(created_at__range=[start_datetime, end_datetime])
+
+        # Filtrar créditos por estado
         pending_credits = all_credits.filter(state="pending").order_by('-created_at')
-        
-        # Obtener hasta dos créditos con estado "completed"
         completed_credits = all_credits.filter(state="completed").order_by('-created_at')[:2]
+
+        # Debug: imprimir conteo
+        print("⏳ Pending credits:", all_credits.count())
+        # print("✅ Completed credits:", completed_credits.count())
 
         # Combinar ambos queryset
         combined_credits = list(pending_credits) + list(completed_credits)
 
-        print(combined_credits)
+        return Response(CreditSerializer(all_credits, many=True).data)
 
-        return Response(CreditSerializer(combined_credits, many=True).data)
+# class CreditsAPIView(APIView):
+
+#     def post(self, request, *args, **kwargs):
+#         start_date = parse_date(request.data.get('start_date'))
+#         end_date = parse_date(request.data.get('end_date'))
+
+#         if not start_date or not end_date:
+#             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
+
+#         # Obtener todos los créditos dentro del rango de fechas
+#         all_credits = Credit.objects.filter(created_at__range=[start_date, end_date])
+
+#         # Filtrar créditos con estado "pending"
+#         pending_credits = all_credits.filter(state="pending").order_by('-created_at')
+        
+#         # Obtener hasta dos créditos con estado "completed"
+#         completed_credits = all_credits.filter(state="completed").order_by('-created_at')[:2]
+
+#         # Combinar ambos queryset
+#         combined_credits = list(pending_credits) + list(completed_credits)
+
+#         # print(combined_credits)
+
+#         return Response(CreditSerializer(combined_credits, many=True).data)
 
 class SortedCreditsByLabelAPIView(APIView):
     def post(self, request, *args, **kwargs):
