@@ -10,6 +10,8 @@ from django.utils import timezone
 import uuid
 import math
 
+from apps.tenant.models.tenant import Tenant
+
 class Country(models.Model):
     name = models.CharField(max_length=100)
     utc_offset = models.IntegerField() 
@@ -121,6 +123,7 @@ class Currency(models.Model):
         return self.currency
 
 class Account(models.Model):
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='accounts',null=True, blank=True)
     id_payment_method = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
     account_number = models.CharField(max_length=50, null=True)
@@ -205,6 +208,7 @@ class User(AbstractUser):
         return self.username
 
 class Credit(models.Model):
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='credits',null=True, blank=True)
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     ORDER_STATES = (
@@ -297,6 +301,8 @@ class Credit(models.Model):
             super(Credit, self).save(*args, **kwargs)
 
 class Transaction(models.Model):
+    
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='transactions',null=True, blank=True)
     TRANSACTION_TYPES = [
         ('income', 'Income'),
         ('expense', 'Expense')
@@ -327,6 +333,7 @@ class Transaction(models.Model):
     description = models.TextField(null=True, blank=True)
  
 class Expense(models.Model):
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='expenses',null=True, blank=True)
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     subcategory = models.ForeignKey(SubCategory, on_delete=models.SET_NULL, null=True, related_name='expenses')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -341,7 +348,6 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.subcategory} - {self.amount}"
-
 
 class Adjustment(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)

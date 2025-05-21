@@ -1,5 +1,7 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
+
+from apps.tenant.admin import TenantScopedAdmin
 from .models import AccountMethodAmount, Adjustment, CreditAdjustment, DocumentType, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
 from django import forms
 from .models import Transaction, Credit
@@ -64,7 +66,7 @@ class CategoryAdmin(admin.ModelAdmin):
     search_fields = ('name', 'category_type')
 
 @admin.register(Account)
-class AccountAdmin(admin.ModelAdmin):
+class AccountAdmin(TenantScopedAdmin):
     list_display = ('name', 'account_number', 'currency', 'balance')
     search_fields = ('name', 'account_number', 'currency')
 
@@ -74,7 +76,7 @@ class LabelAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     search_fields = ('name', 'position')
   
 @admin.register(Expense)
-class ExpenseAdmin(admin.ModelAdmin):
+class ExpenseAdmin(TenantScopedAdmin):
     list_display = ('created_at', 'subcategory', 'amount', 'account', 'date', 'registered_by')
     search_fields = ('account__name', 'registered_by__username')
 
@@ -126,7 +128,7 @@ class TransactionAdminForm(forms.ModelForm):
             self.fields['user'].queryset = User.objects.filter(pk=self.instance.user.pk)
 
 @admin.register(Transaction)
-class TransactionAdmin(admin.ModelAdmin):
+class TransactionAdmin(TenantScopedAdmin):
     form = TransactionAdminForm
     list_display = ( 'transaction_type',  'category',  'get_currency',  'get_client',  'date',  'display_payment_method',  'display_amount_paid', 'agent',  'status', 'source')
     search_fields = ('transaction_type', 'category__name', 'user__username', 'agent__user__username')
@@ -183,7 +185,7 @@ class TransactionAdmin(admin.ModelAdmin):
         js = ('admin/js/filter_credits.js',)
 
 @admin.register(Credit)
-class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class CreditAdmin(ImportExportModelAdmin, TenantScopedAdmin):
     list_display = (
         'uid', 'state', 'created_at', 'description', 'morosidad_level', 'user', 'cost', 'price', 
         'credit_days', 'earnings', 'interest', 'periodicity', 'total_abonos','pending_amount', 

@@ -51,6 +51,7 @@ THIRD_PARTY_APPS = [
 ]
 
 PROJECT_APPS = [
+    'apps.tenant',
     'apps.fintech',
     'apps.dashboard'
 ]
