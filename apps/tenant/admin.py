@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from apps.tenant.models.apy_keys import TenantApiKey
+from apps.tenant.models.audit import TenantAuditLog
 from apps.tenant.models.invitation import TenantInvitation, TenantInvitationRole
 from apps.tenant.models.subscription import SubscriptionPlan, SubscriptionStatus, TenantSubscription
 from .models import Tenant, TenantRole, TenantMembership, TenantSettings
@@ -80,7 +81,7 @@ class APIKeyAdmin(TenantScopedAdmin):
     search_fields = ('prefix', 'tenant__name')
     list_filter = ('revoked', 'created_at')
 
-@admin.register(AuditLog)
+@admin.register(TenantAuditLog)
 class AuditLogAdmin(TenantScopedAdmin):
     list_display = ('tenant', 'action', 'user', 'created_at')
     search_fields = ('action', 'user__username')
