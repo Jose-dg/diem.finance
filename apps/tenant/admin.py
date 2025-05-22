@@ -77,9 +77,8 @@ class TenantInvitationAdmin(TenantScopedAdmin):
 
 @admin.register(TenantApiKey)
 class APIKeyAdmin(TenantScopedAdmin):
-    list_display = ('tenant', 'prefix', 'created_at', 'revoked')
-    search_fields = ('prefix', 'tenant__name')
-    list_filter = ('revoked', 'created_at')
+    list_display = ('tenant', 'prefix', 'created_at')
+    list_filter = ('created_at',)
 
 @admin.register(TenantAuditLog)
 class AuditLogAdmin(TenantScopedAdmin):
