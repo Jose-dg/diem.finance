@@ -3,19 +3,14 @@ import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from apps.fintech.models import Credit, Transaction, CategoryType, Credit, Expense, AccountMethodAmount
+from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmount
 from apps.fintech.serializers import CreditSerializer, CreditSimpleSerializer, TransactionSerializer
 from django.utils.dateparse import parse_date
-from django.utils.timezone import now
 from django.db.models import Sum, Count, F
-from datetime import datetime, timedelta, time
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 from django.utils import timezone
 from django.db.models.functions import TruncDate, Trunc, TruncMonth
-from django.db.models.functions import Trunc
-from pytz import timezone
+from django.utils.timezone import now, make_aware
+from datetime import datetime, timedelta, time
 
 class ClientsWithDefaultAPIView(APIView):
     def post(self, request, *args, **kwargs):
@@ -73,79 +68,6 @@ class CreditsAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-# class CreditsAPIView(APIView):
-#     def post(self, request, *args, **kwargs):
-#         try:
-#             start_date_raw = request.data.get('start_date')
-#             end_date_raw = request.data.get('end_date')
-
-#             if not start_date_raw or not end_date_raw:
-#                 return Response({
-#                     "error": "start_date y end_date son requeridos."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-
-#             start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min))
-#             end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max))
-
-#             credits = Credit.objects.filter(
-#                 created_at__range=[start_date, end_date]
-#             ).select_related(
-#                 'user', 'currency', 'subcategory__category', 'periodicity'
-#             ).prefetch_related(
-#                 'payments__payment_method__currency'
-#             ).order_by('-created_at')
-
-#             serialized = CreditSerializer(credits, many=True)
-#             return Response({"results": serialized.data}, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-# class CreditsAPIView(APIView):
-#     def post(self, request, *args, **kwargs):
-#         start_date = parse_date(request.data.get('start_date'))
-#         end_date = parse_date(request.data.get('end_date'))
-
-#         if not start_date or not end_date:
-#             return Response(
-#                 {"error": "start_date y end_date son requeridos."},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-
-#         # Obtener y ordenar todos los créditos dentro del rango de fechas
-#         all_credits = Credit.objects.filter(
-#             created_at__range=[start_date, end_date]
-#         ).order_by('-created_at')
-
-#         print(all_credits)
-
-#         return Response(CreditSerializer(all_credits, many=True).data)
-    
-# class CreditsAPIView(APIView):
-
-#     def post(self, request, *args, **kwargs):
-#         start_date = parse_date(request.data.get('start_date'))
-#         end_date = parse_date(request.data.get('end_date'))
-
-#         if not start_date or not end_date:
-#             return Response({"error": "start_date y end_date son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Obtener todos los créditos dentro del rango de fechas
-#         all_credits = Credit.objects.filter(created_at__range=[start_date, end_date])
-
-#         # Filtrar créditos con estado "pending"
-#         pending_credits = all_credits.filter(state="pending").order_by('-created_at')
-        
-#         # Obtener hasta dos créditos con estado "completed"
-#         completed_credits = all_credits.filter(state="completed").order_by('-created_at')[:2]
-
-#         # Combinar ambos queryset
-#         combined_credits = list(pending_credits) + list(completed_credits)
-
-#         # print(combined_credits)
-
-#         return Response(CreditSerializer(combined_credits, many=True).data)
 
 class SortedCreditsByLabelAPIView(APIView):
     def post(self, request, *args, **kwargs):
@@ -330,7 +252,7 @@ class SellerChartDataAPIView(APIView):
             .annotate(date=Trunc('created_at', kind='day', tzinfo=timezone('America/Bogota')))
             .values('date')
             .annotate(
-                credits=Count('id'),
+                credits=Count('price'),
                 earnings=Sum('earnings'),
             )
         )
@@ -367,17 +289,6 @@ class SellerChartDataAPIView(APIView):
         # Convertir a lista ordenada por fecha
         data = sorted(data_dict.values(), key=lambda x: x['date'])
         return Response(data)
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.utils.timezone import now, make_aware
-from django.utils.dateparse import parse_date
-from django.db.models import Sum
-from django.db.models.functions import TruncMonth
-from collections import defaultdict
-from datetime import datetime, timedelta, time
-from pytz import timezone
-from apps.fintech.models import Credit, AccountMethodAmount
 
 class MonthlyChartDataAPIView(APIView):
     def post(self, request):
@@ -448,62 +359,3 @@ class MonthlyChartDataAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
-
-
-# class MonthlyChartDataAPIView(APIView):
-#     def post(self, request):
-#         range_months = int(request.data.get("months", 6))
-#         seller_id = request.data.get("seller_id")
-#         subcategory_id = request.data.get("subcategory_id")
-
-#         end_date = now().date()
-#         start_date = end_date - timedelta(days=range_months * 30)
-
-#         credit_filters = {"created_at__date__range": (start_date, end_date)}
-#         if seller_id:
-#             credit_filters["seller_id"] = seller_id
-#         if subcategory_id:
-#             credit_filters["subcategory_id"] = subcategory_id
-
-#         credits = (
-#             Credit.objects.filter(**credit_filters)
-#             .annotate(month=TruncMonth("created_at", tzinfo=timezone("America/Bogota")))
-#             .values("month")
-#             .annotate(
-#                 total_credit=Sum("price"),
-#                 earnings=Sum("earnings"),
-#             )
-#         )
-
-#         payment_filters = {"transaction__date__date__range": (start_date, end_date)}
-#         if seller_id:
-#             payment_filters["credit__seller_id"] = seller_id
-#         if subcategory_id:
-#             payment_filters["credit__subcategory_id"] = subcategory_id
-
-#         payments = (
-#             AccountMethodAmount.objects.filter(**payment_filters)
-#             .annotate(month=TruncMonth("transaction__date", tzinfo=timezone("America/Bogota")))
-#             .values("month")
-#             .annotate(
-#                 payments=Sum("amount_paid")
-#             )
-#         )
-
-#         # Agrupación por mes con formato "YYYY-MM"
-#         data_dict = defaultdict(lambda: {"month": "", "credits": 0, "payments": 0, "earnings": 0})
-
-#         for row in credits:
-#             month_str = row["month"].strftime("%Y-%m")
-#             data_dict[month_str]["month"] = month_str
-#             data_dict[month_str]["credits"] += float(row["total_credit"] or 0)
-#             data_dict[month_str]["earnings"] += float(row["earnings"] or 0)
-
-#         for row in payments:
-#             month_str = row["month"].strftime("%Y-%m")
-#             data_dict[month_str]["month"] = month_str
-#             data_dict[month_str]["payments"] += float(row["payments"] or 0)
-
-#         # Convertir a lista ordenada por mes
-#         data = sorted(data_dict.values(), key=lambda x: x["month"])
-#         return Response(data)

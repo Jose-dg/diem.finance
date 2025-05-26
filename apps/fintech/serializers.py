@@ -104,40 +104,7 @@ class CreditSerializer(serializers.ModelSerializer):
             }
             for p in qs
         ]
-
-# class CreditSerializer(serializers.ModelSerializer):
-#     user = UserSerializer()
-#     payments = serializers.SerializerMethodField()
-#     subcategory = SubCategorySerializer()
-#     currency = CurrencySerializer()
-
-#     class Meta:
-#         model = Credit
-#         fields = '__all__'
-    
-#     def get_payments(self, obj):
-#         payments = AccountMethodAmount.objects.filter(credit=obj).select_related('transaction', 'currency').order_by('transaction__date')
-        
-#         return [
-#             {
-#                 "payment_method": AccountSerializer(payment.payment_method).data,
-#                 "payment_code": payment.payment_code,
-#                 "amount": payment.amount,
-#                 "amount_paid": payment.amount_paid,
-#                 "currency": payment.currency.currency if payment.currency else "No currency assigned",
-#                 "transaction_date": payment.transaction.date if payment.transaction else None,
-#             }
-#             for payment in payments
-#         ]
-    
-#     def update(self, instance, validated_data):
-#         # Lógica personalizada para actualizar el saldo pendiente y los pagos
-#         total_abonos = sum(payment['amount'] for payment in validated_data.get('payments', []))
-#         instance.total_abonos = total_abonos
-#         instance.pending_amount = instance.price - total_abonos
-#         instance.save()
-#         return instance
-    
+ 
 class CreditSimpleSerializer(serializers.ModelSerializer):
     user = UserSerializer()
     subcategory = SubCategorySerializer()
