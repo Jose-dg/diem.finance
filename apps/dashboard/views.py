@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.db.models.functions import TruncDate, Trunc, TruncMonth
 from django.utils.timezone import now, make_aware
 from datetime import datetime, timedelta, time
+import pytz
 
 class ClientsWithDefaultAPIView(APIView):
     def post(self, request, *args, **kwargs):
@@ -249,7 +250,8 @@ class SellerChartDataAPIView(APIView):
 
         credit_qs = (
             Credit.objects.filter(**credit_filters)
-            .annotate(date=Trunc('created_at', kind='day', tzinfo=timezone('America/Bogota')))
+            # .annotate(date=Trunc('created_at', kind='day', tzinfo=timezone('America/Bogota')))
+            .annotate(date=Trunc('created_at', kind='day', tzinfo=pytz.timezone('America/Bogota')))
             .values('date')
             .annotate(
                 credits=Count('price'),
@@ -299,7 +301,8 @@ class MonthlyChartDataAPIView(APIView):
             subcategory_id = request.data.get("subcategory_id")
 
             # Calcular fechas aware
-            tz = timezone("America/Bogota")
+            # tz = timezone("America/Bogota")
+            tz = pytz.timezone("America/Bogota")
             end_date = make_aware(datetime.combine(now().date(), time.max), timezone=tz)
             start_date = make_aware(
                 datetime.combine(end_date.date() - timedelta(days=range_months * 30), time.min),
