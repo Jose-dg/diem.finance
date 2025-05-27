@@ -2,7 +2,7 @@ from decimal import Decimal
 import uuid
 from rest_framework import viewsets
 
-from apps.fintech.utils import calculate_credit_morosity, recalculate_credit_pending_amount, recalculate_credit
+from apps.fintech.utils import recalculate_credit
 from .models import ( 
    User, 
    Account, 
@@ -107,59 +107,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     Vista personalizada para devolver un token JWT con datos adicionales del usuario.
     """
     serializer_class = CustomTokenObtainPairSerializer
-
-class RecalculateCreditMorosityView(APIView):
-    """
-    Recalcula manualmente el estado de morosidad de un crédito específico basado en `uid`.
-    """
-
-    def post(self, request, credit_uid):
-        try:
-            credit = Credit.objects.get(uid=credit_uid, state="pending")
-        except Credit.DoesNotExist:
-            return Response({"error": "Crédito no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-
-        calculate_credit_morosity(credit)  # Llamamos la función
-
-        return Response({
-            "message": "Morosidad recalculada exitosamente",
-            "credit_uid": str(credit.uid),
-            "morosidad_level": credit.morosidad_level,
-            "is_in_default": credit.is_in_default,
-        }, status=status.HTTP_200_OK)
-
-class RecalculateCreditPendingAmountView(APIView):
-    """
-    Vista para recalcular manualmente el total_abonos y pending_amount de múltiples créditos,
-    recibiendo la lista de uids en el cuerpo de la solicitud.
-    """
-
-    def post(self, request, *args, **kwargs):
-        credit_uids = request.data.get('credit_uids', [])
-        if not credit_uids or not isinstance(credit_uids, list):
-            return Response({"error": "credit_uids deben ser una lista."}, status=status.HTTP_400_BAD_REQUEST)
-
-        recalculated_credits = []
-
-        for uid in credit_uids:
-            try:
-                credit = Credit.objects.get(uid=uid.strip(), state="pending")
-                credit = recalculate_credit_pending_amount(credit)
-                recalculated_credits.append({
-                    "credit_uid": str(credit.uid),
-                    "total_abonos": str(credit.total_abonos),
-                    "pending_amount": str(credit.pending_amount),
-                })
-            except Credit.DoesNotExist:
-                recalculated_credits.append({
-                    "credit_uid": uid.strip(),
-                    "error": "Crédito no encontrado"
-                })
-
-        return Response({
-            "message": "Saldos pendientes recalculados",
-            "credits": recalculated_credits,
-        }, status=status.HTTP_200_OK)
 
 class RecalculateCreditView(APIView):
     """

@@ -1,27 +1,16 @@
 from collections import defaultdict
-import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmount
-from apps.fintech.serializers import CreditSerializer, CreditSimpleSerializer, TransactionSerializer
+from apps.fintech.serializers import CreditSerializer, TransactionSerializer
 from django.utils.dateparse import parse_date
-from django.db.models import Sum, Count, F
-from django.utils import timezone
-from django.db.models.functions import TruncDate, Trunc, TruncMonth
 from django.utils.timezone import now, make_aware
+from django.db.models import Sum, Count, F
+from django.db.models.functions import TruncDate, Trunc, TruncMonth
+from django.utils import timezone
 from datetime import datetime, timedelta, time
 import pytz
-
-class ClientsWithDefaultAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        credits = Credit.objects.filter(
-            morosidad_level__in=['mild_default', 'moderate_default', 'severe_default', 'recurrent_default', 'critical_default']
-        ).distinct('user')
-
-        # Usamos el CreditSerializer para serializar todos los datos
-        serializer = CreditSerializer(credits, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class TransactionsAPIView(APIView):
     """
@@ -69,37 +58,6 @@ class CreditsAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-class SortedCreditsByLabelAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        from datetime import datetime, time
-        from django.utils.timezone import make_aware
-        from django.db.models import F
-
-        start_raw = request.data.get('start_date')
-        end_raw = request.data.get('end_date')
-
-        if not start_raw or not end_raw:
-            return Response(
-                {"error": "start_date and end_date are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        start_date = make_aware(datetime.combine(parse_date(start_raw), time.min))
-        end_date = make_aware(datetime.combine(parse_date(end_raw), time.max))
-
-        credits = Credit.objects.filter(
-            created_at__range=[start_date, end_date],
-            state="pending"
-        ).select_related(
-            'user__label', 'periodicity'
-        ).order_by(
-            F('periodicity__days').asc(nulls_last=True),
-            F('user__label__name').asc(nulls_last=True),
-            '-created_at'
-        )
-
-        return Response(CreditSimpleSerializer(credits, many=True).data)
 
 class FinanceView(APIView):
     def post(self, request):
