@@ -70,23 +70,32 @@ class TransactionSerializer(serializers.ModelSerializer):
         payments = AccountMethodAmount.objects.filter(transaction=obj).order_by('transaction__date')
         return AccountMethodAmountSerializer(payments, many=True).data
 
+from django.utils.timezone import localtime
+from .models import Credit, AccountMethodAmount, CreditAdjustment
+from .serializers import UserSerializer, AccountSerializer, SubCategorySerializer, CurrencySerializer
+
+class CreditAdjustmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CreditAdjustment
+        fields = ['type', 'amount', 'added_on', 'reason', 'created_at']
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        if instance.created_at:
+            ret['created_at'] = localtime(instance.created_at).isoformat()
+        return ret
 
 class CreditSerializer(serializers.ModelSerializer):
-    # ① campos que ya tenías
-    user       = UserSerializer()
-    payments   = serializers.SerializerMethodField()
+    user = UserSerializer()
+    payments = serializers.SerializerMethodField()
     subcategory = SubCategorySerializer()
-    currency   = CurrencySerializer()
-
-    # ② nuevo campo: número de días de la periodicidad
-    periodicity_days = serializers.IntegerField(
-        source='periodicity.days',
-        read_only=True
-    )
+    currency = CurrencySerializer()
+    adjustments = CreditAdjustmentSerializer(many=True, read_only=True)
+    periodicity_days = serializers.IntegerField(source='periodicity.days', read_only=True)
 
     class Meta:
-        model  = Credit
-        fields = '__all__'        # DRF incluirá también periodicity_days
+        model = Credit
+        fields = '__all__'
 
     def get_payments(self, obj):
         qs = AccountMethodAmount.objects.filter(
@@ -96,14 +105,56 @@ class CreditSerializer(serializers.ModelSerializer):
         return [
             {
                 "payment_method": AccountSerializer(p.payment_method).data,
-                "payment_code":   p.payment_code,
-                "amount":         p.amount,
-                "amount_paid":    p.amount_paid,
-                "currency":       p.currency.currency if p.currency else "No currency",
-                "transaction_date": p.transaction.date if p.transaction else None,
+                "payment_code": p.payment_code,
+                "amount": p.amount,
+                "amount_paid": p.amount_paid,
+                "currency": p.currency.currency if p.currency else "No currency",
+                "transaction_date": localtime(p.transaction.date).isoformat() if p.transaction and p.transaction.date else None,
             }
             for p in qs
         ]
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        for field in ['created_at', 'first_date_payment', 'second_date_payment']:
+            if instance and getattr(instance, field):
+                ret[field] = localtime(getattr(instance, field)).isoformat()
+        return ret
+
+
+# class CreditSerializer(serializers.ModelSerializer):
+#     # ① campos que ya tenías
+#     user       = UserSerializer()
+#     payments   = serializers.SerializerMethodField()
+#     subcategory = SubCategorySerializer()
+#     currency   = CurrencySerializer()
+
+#     # ② nuevo campo: número de días de la periodicidad
+#     periodicity_days = serializers.IntegerField(
+#         source='periodicity.days',
+#         read_only=True
+#     )
+
+#     class Meta:
+#         model  = Credit
+#         fields = '__all__'        # DRF incluirá también periodicity_days
+
+#     def get_payments(self, obj):
+#         qs = AccountMethodAmount.objects.filter(
+#             credit=obj
+#         ).select_related('transaction', 'currency').order_by('transaction__date')
+
+#         return [
+#             {
+#                 "payment_method": AccountSerializer(p.payment_method).data,
+#                 "payment_code":   p.payment_code,
+#                 "amount":         p.amount,
+#                 "amount_paid":    p.amount_paid,
+#                 "currency":       p.currency.currency if p.currency else "No currency",
+#                 "transaction_date": p.transaction.date if p.transaction else None,
+#             }
+#             for p in qs
+#         ]
  
 class CreditSimpleSerializer(serializers.ModelSerializer):
     user = UserSerializer()

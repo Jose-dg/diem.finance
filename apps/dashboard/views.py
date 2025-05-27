@@ -31,6 +31,8 @@ class TransactionsAPIView(APIView):
 
         return Response(TransactionSerializer(transactions, many=True).data, status=status.HTTP_200_OK)
 
+from django.utils.timezone import make_aware, get_current_timezone
+
 class CreditsAPIView(APIView):
     def post(self, request, *args, **kwargs):
         try:
@@ -42,15 +44,17 @@ class CreditsAPIView(APIView):
                     "error": "start_date y end_date son requeridos."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min))
-            end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max))
+            tz = get_current_timezone()
+            start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min), timezone=tz)
+            end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max), timezone=tz)
 
             credits = Credit.objects.filter(
                 created_at__range=[start_date, end_date]
             ).select_related(
                 'user', 'currency', 'subcategory__category', 'periodicity'
             ).prefetch_related(
-                'payments__payment_method__currency'
+                'payments__payment_method__currency',
+                'adjustments__type'
             ).order_by('-created_at')
 
             serialized = CreditSerializer(credits, many=True)
@@ -58,6 +62,34 @@ class CreditsAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# class CreditsAPIView(APIView):
+#     def post(self, request, *args, **kwargs):
+#         try:
+#             start_date_raw = request.data.get('start_date')
+#             end_date_raw = request.data.get('end_date')
+
+#             if not start_date_raw or not end_date_raw:
+#                 return Response({
+#                     "error": "start_date y end_date son requeridos."
+#                 }, status=status.HTTP_400_BAD_REQUEST)
+
+#             start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min))
+#             end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max))
+
+#             credits = Credit.objects.filter(
+#                 created_at__range=[start_date, end_date]
+#             ).select_related(
+#                 'user', 'currency', 'subcategory__category', 'periodicity'
+#             ).prefetch_related(
+#                 'payments__payment_method__currency'
+#             ).order_by('-created_at')
+
+#             serialized = CreditSerializer(credits, many=True)
+#             return Response({"results": serialized.data}, status=status.HTTP_200_OK)
+
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class FinanceView(APIView):
     def post(self, request):
