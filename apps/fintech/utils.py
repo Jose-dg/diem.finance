@@ -1,9 +1,10 @@
+from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum
 from django.db import transaction
 from decimal import Decimal
 from django.db import transaction
-from apps.fintech.models import Transaction
+from apps.fintech.models import Installment, Transaction
 from decimal import Decimal, ROUND_HALF_UP
 
 import math
@@ -116,3 +117,59 @@ def generate_payment_dates(first_date, second_date, periodicity_days, today):
             current_date += timezone.timedelta(days=periodicity_days)
 
     return dates
+
+
+def generar_cuotas(credit):
+    if not credit.periodicity or not credit.installment_number or not credit.installment_value:
+        return
+
+    cuotas = []
+    fecha_inicial = credit.created_at.date()
+    dias_periodicidad = credit.periodicity.days
+
+    for i in range(credit.installment_number):
+        fecha_vencimiento = fecha_inicial + timedelta(days=(i + 1) * dias_periodicidad)
+        cuota = Installment(
+            credit=credit,
+            number=i + 1,
+            due_date=fecha_vencimiento,
+            amount=credit.installment_value,
+            principal_amount=credit.installment_value,  # Puedes refinar esto si separas interés
+            interest_amount=Decimal('0.00')
+        )
+        cuotas.append(cuota)
+
+    Installment.objects.bulk_create(cuotas)
+
+    # Actualizar las fechas de primer y último pago
+    if cuotas:
+        credit.first_date_payment = cuotas[0].due_date
+        credit.second_date_payment = cuotas[-1].due_date
+        credit.save(update_fields=['first_date_payment', 'second_date_payment'])
+
+
+def distribuir_pago_a_cuotas(credit, monto_pagado, fecha_pago=None):
+    monto_restante = monto_pagado
+
+    cuotas_pendientes = Installment.objects.filter(
+        credit=credit,
+        paid=False
+    ).order_by('due_date', 'number')
+
+    for cuota in cuotas_pendientes:
+        if monto_restante <= Decimal('0.00'):
+            break
+
+        monto_cuota = cuota.amount or Decimal('0.00')
+
+        if monto_restante >= monto_cuota:
+            cuota.principal_amount = monto_cuota
+            cuota.paid = True
+            cuota.paid_on = fecha_pago
+            cuota.save()
+            monto_restante -= monto_cuota
+        else:
+            cuota.principal_amount = (cuota.principal_amount or Decimal('0.00')) + monto_restante
+            cuota.save()
+            monto_restante = Decimal('0.00')
+            break

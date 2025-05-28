@@ -367,3 +367,31 @@ class CreditAdjustment(models.Model):
     def __str__(self):
         signo = '+' if self.type and self.type.is_positive else '-'
         return f"{self.type.name if self.type else 'Tipo desconocido'} {signo}${self.amount} al crédito {self.credit_id or 'sin asignar'} ({self.added_on})"
+
+class Installment(models.Model):
+    credit = models.ForeignKey(Credit, on_delete=models.CASCADE, related_name='installments', null=True, blank=True)
+    number = models.PositiveIntegerField(null=True, blank=True, help_text="Número de cuota")
+    due_date = models.DateField(null=True, blank=True, help_text="Fecha de vencimiento de la cuota")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Monto de la cuota")
+    paid = models.BooleanField(default=False, help_text="Indica si la cuota ha sido pagada")
+    paid_on = models.DateField(null=True, blank=True, help_text="Fecha en la cual se realizó el pago")
+    principal_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'), null=True, blank=True, help_text="Monto aplicado a capital")
+    interest_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'), null=True, blank=True, help_text="Monto aplicado a intereses")
+    late_fee = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'), null=True, blank=True, help_text="Recargo por mora si aplica")
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('credit', 'number')
+        ordering = ['due_date']
+
+    def mark_as_paid(self, payment_date=None):
+        self.paid = True
+        self.paid_on = payment_date or timezone.now().date()
+        self.save()
+
+    def is_overdue(self):
+        return not self.paid and self.due_date and timezone.now().date() > self.due_date
+
+    def __str__(self):
+        return f"Cuota #{self.number or '?'} de {self.credit_id} - Vence: {self.due_date or 'sin fecha'} - Pagada: {self.paid}"

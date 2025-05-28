@@ -1,7 +1,7 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 
-from .models import AccountMethodAmount, Adjustment, CreditAdjustment, DocumentType, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
+from .models import AccountMethodAmount, Adjustment, CreditAdjustment, DocumentType, Installment, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
 from django import forms
 from .models import Transaction, Credit
 from django.db.models import Q
@@ -228,3 +228,11 @@ class CreditAdjustmentAdmin(admin.ModelAdmin):
     date_hierarchy = 'added_on'
     ordering = ('-added_on',)
     
+
+@admin.register(Installment)
+class InstallmentAdmin(admin.ModelAdmin):
+    list_display = ('credit', 'number', 'due_date', 'amount', 'principal_amount', 'interest_amount', 'late_fee', 'paid', 'paid_on')
+    list_filter = ('paid','due_date','credit')
+    search_fields = ('credit__id','credit__client__name','number')
+    readonly_fields = ('created_at','updated_at')
+    ordering = ('-due_date',)

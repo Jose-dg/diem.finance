@@ -1,11 +1,9 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 
-from apps.fintech.utils import recalculate_credit
+from apps.fintech.utils import distribuir_pago_a_cuotas, generar_cuotas, recalculate_credit
 from .models import CreditAdjustment, Transaction, AccountMethodAmount, Credit
 from datetime import datetime
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
@@ -106,3 +104,16 @@ def handle_credit_adjustment_delete(sender, instance, **kwargs):
     """
     if instance.credit:
         recalculate_credit(instance.credit)
+
+@receiver(post_save, sender=Credit)
+def crear_cuotas_credito(sender, instance, created, **kwargs):
+    if created and not instance.installments.exists():
+        generar_cuotas(instance)
+
+@receiver(post_save, sender=AccountMethodAmount)
+def distribuir_pago_por_metodo(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    fecha_pago = instance.transaction.created_at.date() if instance.transaction else None
+    distribuir_pago_a_cuotas(instance.credit, instance.amount_paid, fecha_pago)
