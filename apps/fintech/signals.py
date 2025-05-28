@@ -4,6 +4,7 @@ from django.dispatch import receiver
 from apps.fintech.utils import distribuir_pago_a_cuotas, generar_cuotas, recalculate_credit
 from .models import CreditAdjustment, Transaction, AccountMethodAmount, Credit
 from datetime import datetime
+from django.utils import timezone
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
@@ -111,9 +112,16 @@ def crear_cuotas_credito(sender, instance, created, **kwargs):
         generar_cuotas(instance)
 
 @receiver(post_save, sender=AccountMethodAmount)
-def distribuir_pago_por_metodo(sender, instance, created, **kwargs):
+def distribuir_pago(sender, instance, created, **kwargs):
     if not created:
         return
 
-    fecha_pago = instance.transaction.created_at.date() if instance.transaction else None
+    transaction = instance.transaction
+    fecha_pago = getattr(transaction, 'created_at', None)
+
+    if not fecha_pago:
+        fecha_pago = timezone.now().date()
+    else:
+        fecha_pago = fecha_pago.date()
+
     distribuir_pago_a_cuotas(instance.credit, instance.amount_paid, fecha_pago)
