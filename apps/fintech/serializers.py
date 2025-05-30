@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from .models import *
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
+from django.utils.timezone import localtime
+from .models import Credit, AccountMethodAmount, CreditAdjustment
 
 User = get_user_model()
 
@@ -70,10 +72,6 @@ class TransactionSerializer(serializers.ModelSerializer):
         payments = AccountMethodAmount.objects.filter(transaction=obj).order_by('transaction__date')
         return AccountMethodAmountSerializer(payments, many=True).data
 
-from django.utils.timezone import localtime
-from .models import Credit, AccountMethodAmount, CreditAdjustment
-from .serializers import UserSerializer, AccountSerializer, SubCategorySerializer, CurrencySerializer
-
 class CreditAdjustmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = CreditAdjustment
@@ -85,6 +83,14 @@ class CreditAdjustmentSerializer(serializers.ModelSerializer):
             ret['created_at'] = localtime(instance.created_at).isoformat()
         return ret
 
+class InstallmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Installment
+        fields = [
+            'id', 'number', 'due_date', 'amount', 'paid', 'paid_on',
+            'principal_amount', 'interest_amount', 'late_fee',
+        ]
+
 class CreditSerializer(serializers.ModelSerializer):
     # ① campos que ya tenías
     user       = UserSerializer()
@@ -93,11 +99,12 @@ class CreditSerializer(serializers.ModelSerializer):
     currency   = CurrencySerializer()
 
     periodicity_days = serializers.IntegerField(source='periodicity.days', read_only=True)
-    adjustments = CreditAdjustmentSerializer(many=True, read_only=True)
+    # adjustments = CreditAdjustmentSerializer(many=True, read_only=True)
+    installments = InstallmentSerializer(many=True, read_only=True)
 
     class Meta:
         model  = Credit
-        fields = '__all__'        # DRF incluirá también periodicity_days
+        fields = '__all__'        
 
     def get_payments(self, obj):
         qs = AccountMethodAmount.objects.filter(

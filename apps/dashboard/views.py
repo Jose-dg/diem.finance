@@ -2,16 +2,19 @@ from collections import defaultdict
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmount
-from apps.fintech.serializers import CreditSerializer, TransactionSerializer
+
 from django.utils.dateparse import parse_date
-from django.utils.timezone import now, make_aware
+from django.utils.timezone import now, make_aware, get_current_timezone
+
 from django.db.models import Sum, Count, F
 from django.db.models.functions import TruncDate, Trunc, TruncMonth
+
 from django.utils import timezone
 from datetime import datetime, timedelta, time
 import pytz
-from django.utils.timezone import make_aware, get_current_timezone
+
+from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmount
+from apps.fintech.serializers import CreditSerializer
 
 class TransactionsAPIView(APIView):
     """
@@ -31,8 +34,6 @@ class TransactionsAPIView(APIView):
         ).order_by('-date')
 
         return Response(TransactionSerializer(transactions, many=True).data, status=status.HTTP_200_OK)
-
-
 
 class CreditsAPIView(APIView):
     def post(self, request, *args, **kwargs):
@@ -54,8 +55,9 @@ class CreditsAPIView(APIView):
             ).select_related(
                 'user', 'currency', 'subcategory__category', 'periodicity'
             ).prefetch_related(
+                'installments', 
                 'payments__payment_method__currency',
-                'adjustments__type'
+                'adjustments__type',
             ).order_by('-created_at')
 
             serialized = CreditSerializer(credits, many=True)
@@ -63,34 +65,6 @@ class CreditsAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-# class CreditsAPIView(APIView):
-#     def post(self, request, *args, **kwargs):
-#         try:
-#             start_date_raw = request.data.get('start_date')
-#             end_date_raw = request.data.get('end_date')
-
-#             if not start_date_raw or not end_date_raw:
-#                 return Response({
-#                     "error": "start_date y end_date son requeridos."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-
-#             start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min))
-#             end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max))
-
-#             credits = Credit.objects.filter(
-#                 created_at__range=[start_date, end_date]
-#             ).select_related(
-#                 'user', 'currency', 'subcategory__category', 'periodicity'
-#             ).prefetch_related(
-#                 'payments__payment_method__currency'
-#             ).order_by('-created_at')
-
-#             serialized = CreditSerializer(credits, many=True)
-#             return Response({"results": serialized.data}, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class FinanceView(APIView):
     def post(self, request):
@@ -220,69 +194,6 @@ class FinanceView(APIView):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-# class SellerChartDataAPIView(APIView):
-#     # permission_classes = [IsAuthenticated]  # Desactivado temporalmente
-
-#     def post(self, request):
-#         # Obtener rango de fechas desde el body (últimos 90 días por defecto)
-#         range_days = int(request.data.get("range", 90))
-#         seller_id = request.data.get("seller_id")
-#         subcategory_id = request.data.get("subcategory_id")
-
-#         end_date = now().date()
-#         start_date = end_date - timedelta(days=range_days)
-
-#         credit_filters = {'created_at__date__range': (start_date, end_date)}
-#         if seller_id:
-#             credit_filters['seller_id'] = seller_id
-#         if subcategory_id:
-#             credit_filters['subcategory_id'] = subcategory_id
-
-#         credit_qs = (
-#             Credit.objects.filter(**credit_filters)
-#             # .annotate(date=Trunc('created_at', kind='day', tzinfo=timezone('America/Bogota')))
-#             .annotate(date=Trunc('created_at', kind='day', tzinfo=pytz.timezone('America/Bogota')))
-#             .values('date')
-#             .annotate(
-#                 credits=Count('price'),
-#                 earnings=Sum('earnings'),
-#             )
-#         )
-
-#         payment_filters = {'transaction__date__date__range': (start_date, end_date)}
-#         if seller_id:
-#             payment_filters['credit__seller_id'] = seller_id
-#         if subcategory_id:
-#             payment_filters['credit__subcategory_id'] = subcategory_id
-
-#         payment_qs = (
-#             AccountMethodAmount.objects.filter(**payment_filters)
-#             .annotate(date=Trunc('transaction__date', kind='day', tzinfo=timezone('America/Bogota')))
-#             .values('date')
-#             .annotate(
-#                 payments=Sum('amount_paid')
-#             )
-#         )
-
-#         # Unificar resultados en un solo diccionario agrupado por fecha
-#         data_dict = {}
-
-#         for row in credit_qs:
-#             key = row['date']
-#             data_dict.setdefault(key, {'date': key, 'credits': 0, 'payments': 0, 'earnings': 0})
-#             data_dict[key]['credits'] += row['credits']
-#             data_dict[key]['earnings'] += float(row['earnings'] or 0)
-
-#         for row in payment_qs:
-#             key = row['date']
-#             data_dict.setdefault(key, {'date': key, 'credits': 0, 'payments': 0, 'earnings': 0})
-#             data_dict[key]['payments'] += float(row['payments'] or 0)
-
-#         # Convertir a lista ordenada por fecha
-#         data = sorted(data_dict.values(), key=lambda x: x['date'])
-#         return Response(data)
-
 
 class SellerChartDataAPIView(APIView):
     def post(self, request):

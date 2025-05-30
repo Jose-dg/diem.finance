@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.db import transaction
 from apps.fintech.models import Installment, Transaction
 from decimal import Decimal, ROUND_HALF_UP
-
+from django.utils.timezone import now
 import math
 
 from django.db import transaction
@@ -147,6 +147,14 @@ def generar_cuotas(credit):
         credit.second_date_payment = cuotas[-1].due_date
         credit.save(update_fields=['first_date_payment', 'second_date_payment'])
 
+def credit_has_overdue_installments(credit):
+    today = now().date()
+    return Installment.objects.filter(
+        credit=credit,
+        paid=False,
+        due_date__lt=today
+    ).exists()
+
 
 def distribuir_pago_a_cuotas(credit, monto_pagado, fecha_pago=None):
     monto_restante = monto_pagado
@@ -173,3 +181,18 @@ def distribuir_pago_a_cuotas(credit, monto_pagado, fecha_pago=None):
             cuota.save()
             monto_restante = Decimal('0.00')
             break
+
+def update_credit_payment_dates(credit):
+    installments = credit.installments.all()
+
+    # Última cuota pagada
+    last_paid = installments.filter(paid=True).order_by('-paid_on').first()
+    credit.first_date_payment = last_paid.paid_on if last_paid else None
+
+    # Próxima cuota pendiente
+    today = timezone.now().date()
+    next_due = installments.filter(paid=False, due_date__gte=today).order_by('due_date').first()
+    credit.second_date_payment = next_due.due_date if next_due else None
+
+    credit.save(update_fields=['first_date_payment', 'second_date_payment'])
+
