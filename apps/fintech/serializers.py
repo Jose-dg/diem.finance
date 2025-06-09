@@ -5,6 +5,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from django.utils.timezone import localtime
 from .models import Credit, AccountMethodAmount, CreditAdjustment
+from rest_framework.pagination import PageNumberPagination
 
 User = get_user_model()
 
@@ -91,6 +92,34 @@ class InstallmentSerializer(serializers.ModelSerializer):
             'principal_amount', 'interest_amount', 'late_fee',
         ]
 
+class CreditFilterSerializer(serializers.Serializer):
+    start_date = serializers.DateField(
+        help_text="Fecha de inicio (YYYY-MM-DD) en America/Bogota",
+        required=True
+    )
+    end_date = serializers.DateField(
+        help_text="Fecha de fin (YYYY-MM-DD) en America/Bogota",
+        required=True
+    )
+    status = serializers.ChoiceField(
+        choices=Credit.ORDER_STATES, required=False,
+        help_text="Filtra por estado de crédito"
+    )
+
+class CreditListSerializer(serializers.ModelSerializer):
+    created_at = serializers.DateTimeField(
+        format="%Y-%m-%dT%H:%M:%S%z",
+        default_timezone=timezone.get_default_timezone()
+    )
+
+    class Meta:
+        model = Credit
+        fields = [
+            'uid', 'user', 'state', 'cost', 'price',
+            'pending_amount', 'total_abonos', 'created_at',
+            # añade aquí los campos que necesites exponer
+        ]
+            
 class CreditSerializer(serializers.ModelSerializer):
     # ① campos que ya tenías
     user       = UserSerializer()
@@ -184,3 +213,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'last_name': self.user.last_name,
         }
         return data
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100

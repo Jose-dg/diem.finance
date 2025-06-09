@@ -1,20 +1,21 @@
 from collections import defaultdict
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, generics
 
 from django.utils.dateparse import parse_date
-from django.utils.timezone import now, make_aware, get_current_timezone
+from django.utils.timezone import now, make_aware
 
-from django.db.models import Sum, Count, F
-from django.db.models.functions import TruncDate, Trunc, TruncMonth
+from django.db.models import Sum
+from django.db.models.functions import Trunc, TruncMonth
 
 from django.utils import timezone
 from datetime import datetime, timedelta, time
 import pytz
 
 from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmount
-from apps.fintech.serializers import CreditSerializer
+from apps.fintech.serializers import StandardResultsSetPagination
+from apps.fintech.serializers import CreditSerializer, CreditFilterSerializer
 
 class TransactionsAPIView(APIView):
     """
@@ -35,36 +36,36 @@ class TransactionsAPIView(APIView):
 
         return Response(TransactionSerializer(transactions, many=True).data, status=status.HTTP_200_OK)
 
-class CreditsAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        try:
-            start_date_raw = request.data.get('start_date')
-            end_date_raw = request.data.get('end_date')
+# class CreditsAPIView(APIView):
+#     def post(self, request, *args, **kwargs):
+#         try:
+#             start_date_raw = request.data.get('start_date')
+#             end_date_raw = request.data.get('end_date')
 
-            if not start_date_raw or not end_date_raw:
-                return Response({
-                    "error": "start_date y end_date son requeridos."
-                }, status=status.HTTP_400_BAD_REQUEST)
+#             if not start_date_raw or not end_date_raw:
+#                 return Response({
+#                     "error": "start_date y end_date son requeridos."
+#                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            tz = get_current_timezone()
-            start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min), timezone=tz)
-            end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max), timezone=tz)
+#             tz = get_current_timezone()
+#             start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min), timezone=tz)
+#             end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max), timezone=tz)
 
-            credits = Credit.objects.filter(
-                created_at__range=[start_date, end_date]
-            ).select_related(
-                'user', 'currency', 'subcategory__category', 'periodicity'
-            ).prefetch_related(
-                'installments', 
-                'payments__payment_method__currency',
-                'adjustments__type',
-            ).order_by('-created_at')
+#             credits = Credit.objects.filter(
+#                 created_at__range=[start_date, end_date]
+#             ).select_related(
+#                 'user', 'currency', 'subcategory__category', 'periodicity'
+#             ).prefetch_related(
+#                 'installments', 
+#                 'payments__payment_method__currency',
+#                 'adjustments__type',
+#             ).order_by('-created_at')
 
-            serialized = CreditSerializer(credits, many=True)
-            return Response({"results": serialized.data}, status=status.HTTP_200_OK)
+#             serialized = CreditSerializer(credits, many=True)
+#             return Response({"results": serialized.data}, status=status.HTTP_200_OK)
 
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class FinanceView(APIView):
     def post(self, request):
@@ -321,3 +322,59 @@ class MonthlyChartDataAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+class CreditsAPIView(APIView):
+    """
+    Lista créditos creados entre start_date y end_date (inclusive),
+    con paginación, filtros opcionales y fechas retornadas en UTC-05:00.
+    Soporta GET (query params) y POST (body json) para máxima flexibilidad.
+    """
+    
+    def get(self, request, *args, **kwargs):
+        return self._filter_and_respond(request, request.query_params)
+
+    def post(self, request, *args, **kwargs):
+        return self._filter_and_respond(request, request.data)
+
+    def _filter_and_respond(self, request, params):
+        # Validar que end_date no sea menor que start_date
+        sd = params.get('start_date')
+        ed = params.get('end_date')
+        if sd and ed and parse_date(ed) < parse_date(sd):
+            return Response(
+                {"detail": "end_date no puede ser anterior a start_date."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 1) validar y parsear parámetros
+        filter_ser = CreditFilterSerializer(data=params)
+        filter_ser.is_valid(raise_exception=True)
+        data = filter_ser.validated_data
+
+        # 2) combinar fechas con hora mínima y máxima en zona local (America/Bogota)
+        tz = timezone.get_default_timezone()
+        start_local = datetime.combine(data['start_date'], time.min)
+        end_local   = datetime.combine(data['end_date'],   time.max)
+        start_aware = timezone.make_aware(start_local, tz)
+        end_aware   = timezone.make_aware(end_local,   tz)
+
+        # 3) construir el queryset base (rango de fechas)
+        qs = Credit.objects.filter(created_at__range=(start_aware, end_aware))
+
+        # 4) filtros opcionales
+        if data.get('status'):
+            qs = qs.filter(state=data['status'])
+
+        # 5) eager loading para performance
+        qs = (
+            qs
+            .select_related('user','seller','currency','subcategory','periodicity')
+            .prefetch_related('installments','adjustments','payments__payment_method')
+            .order_by('-created_at')
+        )
+
+        # 6) paginación manual
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = CreditSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
