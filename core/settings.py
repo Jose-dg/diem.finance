@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import timedelta
 import os
 import environ
+from celery.schedules import crontab
 
 env = environ.Env()
 environ.Env.read_env()
@@ -271,7 +272,20 @@ OAUTH2_PROVIDER = {
     'AUTHORIZATION_CODE_EXPIRE_SECONDS': 36000,
 }
 
-# AUTH_USER_MODEL = 'fintech.User'
+CELERY_BROKER_URL = env('REDIS_URL')
+CELERY_RESULT_BACKEND = env('REDIS_URL')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+CELERY_BEAT_SCHEDULE = {
+    'recalc-credits-nightly': {
+        'task': 'apps.fintech.tasks.batch_recalculate_credits',
+        # se ejecuta todos los días a las 02:00 hora de America/Bogota
+        'schedule': crontab(hour=2, minute=0),
+    },
+}
 
 
 
