@@ -250,7 +250,7 @@ class Credit(models.Model):
     ], default='on_time')
 
     def __str__(self):
-        return f"{self.user} - {self.subcategory}: Credit:{self.price}, pending:{self.pending_amount}"
+        return f"{self.uid} - {self.user} - {self.subcategory}: Credit:{self.price}, pending:{self.pending_amount}"
 
     def update_total_abonos(self, amount_paid_difference):
         """
