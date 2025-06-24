@@ -48,7 +48,8 @@ THIRD_PARTY_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'import_export',
-    'oauth2_provider'
+    'oauth2_provider',
+    'django_filters',
 ]
 
 PROJECT_APPS = [
@@ -203,9 +204,12 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
-    )
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [             
+        "django_filters.rest_framework.DjangoFilterBackend",
+    ],
 }
 
 # REST_FRAMEWORK = {
@@ -282,7 +286,6 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
     'recalc-credits-nightly': {
         'task': 'apps.fintech.tasks.batch_recalculate_credits',
-        # se ejecuta todos los días a las 02:00 hora de America/Bogota
         'schedule': crontab(hour=2, minute=0),
     },
 }

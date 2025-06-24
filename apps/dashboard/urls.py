@@ -1,15 +1,15 @@
 from django.urls import path
 from .views import (
    CreditsAPIView,
+   CreditFilterAPIView,
    FinanceView,
    SellerChartDataAPIView,
-   TransactionsAPIView, 
    MonthlyChartDataAPIView
    )
 
 urlpatterns = [
     path('credits/', CreditsAPIView.as_view(), name='credits'),
-    path('transactions/', TransactionsAPIView.as_view(), name='transactions'),
+    path('credits/filter/', CreditFilterAPIView.as_view(), name='credit-filter'),
     
     # Rutas para APIViews
     path('data/', FinanceView.as_view(), name='finance-summary'),
