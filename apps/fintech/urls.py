@@ -1,13 +1,37 @@
 from django.urls import path
 from .views import (
+    UserRegistrationView,
+    UserProfileView,
+    UserRequestView,
+    CreditRequestDetailView,
+    InvestmentRequestDetailView,
+    RequestConstantsView,
     RecalculateCreditView,
     UserViewSet,
     AccountViewSet,
     TransactionViewSet,
-    CreditViewSet
+    CreditViewSet,
+    CustomTokenObtainPairView,
+    ClientCreditsView
 )
 
 urlpatterns = [
+
+    # Registro de usuario
+    path('api/auth/register/', UserRegistrationView.as_view(), name='user-register'),
+    
+    # Perfil de usuario
+    path('api/user/profile/', UserProfileView.as_view(), name='user-profile'),
+    
+    # Solicitudes
+    path('api/user/requests/', UserRequestView.as_view(), name='user-requests'),
+    path('api/user/requests/credit-detail/', CreditRequestDetailView.as_view(), name='credit-request-detail'),
+    path('api/user/requests/investment-detail/', InvestmentRequestDetailView.as_view(), name='investment-request-detail'),
+    path('api/user/requests/constants/', RequestConstantsView.as_view(), name='request-constants'),
+    
+    # Consulta de créditos por cliente
+    path('api/client/credits/', ClientCreditsView.as_view(), name='client-credits'),
+    
     # Rutas para ViewSets
     path('clients/', UserViewSet.as_view({'get': 'list', 'post': 'create'}), name='client-list'),
     path('clients/<int:pk>/', UserViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='client-detail'),

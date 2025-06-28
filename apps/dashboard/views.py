@@ -18,39 +18,6 @@ from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmoun
 from apps.fintech.serializers import StandardResultsSetPagination
 from apps.fintech.serializers import CreditSerializer, CreditFilterSerializer
 
-
-
-# class CreditsAPIView(APIView):
-#     def post(self, request, *args, **kwargs):
-#         try:
-#             start_date_raw = request.data.get('start_date')
-#             end_date_raw = request.data.get('end_date')
-
-#             if not start_date_raw or not end_date_raw:
-#                 return Response({
-#                     "error": "start_date y end_date son requeridos."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-
-#             tz = get_current_timezone()
-#             start_date = make_aware(datetime.combine(parse_date(start_date_raw), time.min), timezone=tz)
-#             end_date = make_aware(datetime.combine(parse_date(end_date_raw), time.max), timezone=tz)
-
-#             credits = Credit.objects.filter(
-#                 created_at__range=[start_date, end_date]
-#             ).select_related(
-#                 'user', 'currency', 'subcategory__category', 'periodicity'
-#             ).prefetch_related(
-#                 'installments', 
-#                 'payments__payment_method__currency',
-#                 'adjustments__type',
-#             ).order_by('-created_at')
-
-#             serialized = CreditSerializer(credits, many=True)
-#             return Response({"results": serialized.data}, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 class FinanceView(APIView):
     def post(self, request):
         try:
@@ -362,44 +329,7 @@ class CreditsAPIView(APIView):
         page = paginator.paginate_queryset(qs, request, view=self)
         serializer = CreditSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
-    
-# class CreditFilterAPIView(APIView):
-#     """
-#     POST /dashboard/credits/filter/
-#     Body JSON: {
-#       "first_name": "...",
-#       "last_name": "...",
-#       "phone_number": "...",
-#       "label": "...",
-#       "periodicity_days": 15,
-#       "is_in_default": true,
-#       "morosidad_level": "mild_default",
-#       "state": "pending",
-#       "search": "texto libre"
-#     }
-#     """
-#     def post(self, request, *args, **kwargs):
-#         print("La petición a CreditFilterAPIView se ha recibido correctamente.")
-
-#         # Obtmizar queryset base con select_related para evitar N+1 queries
-#         qs = Credit.objects.select_related(
-#             "user__phone_1",
-#             "user__label",
-#             "periodicity"
-#         ).all()
-
-#         # aplica el FilterSet sobre request.data
-#         filterset = CreditFilter(request.data, queryset=qs)
-#         if not filterset.is_valid():
-#             return Response(filterset.errors, status=status.HTTP_400_BAD_REQUEST)
-
-#         filtered_qs = filterset.qs
-
-#         # Serializar los resultados filtrados
-#         serializer = CreditSerializer(filtered_qs, many=True, context={"request": request})
-#         return Response(serializer.data, status=200)
-
-
+ 
 class CreditFilterAPIView(APIView):
     def post(self, request, *args, **kwargs):
         print("✅ Petición recibida en CreditFilterAPIView")
@@ -438,3 +368,4 @@ class CreditFilterAPIView(APIView):
         except Exception as e:
             print("❗ Error inesperado:", str(e))
             return Response({"error": str(e)}, status=500)
+

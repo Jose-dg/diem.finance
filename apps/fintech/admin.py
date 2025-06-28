@@ -1,7 +1,36 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 
-from .models import AccountMethodAmount, Adjustment, CreditAdjustment, DocumentType, Installment, Label, Seller, User, Address, CategoryType, Category, SubCategory, Account, Transaction, Credit, Expense, PhoneNumber, Country, ParamsLocation, Identifier, Language, Currency, Periodicity, Role
+from .models import (
+    AccountMethodAmount, 
+    Adjustment, CreditAdjustment, 
+    DocumentType, 
+    Installment, 
+    Label, 
+    Seller, 
+    User, 
+    Address, 
+    CategoryType, 
+    Category, 
+    SubCategory, 
+    Account, 
+    Transaction, 
+    Credit, 
+    Expense, 
+    PhoneNumber, 
+    Country, ParamsLocation, 
+    Identifier, 
+    Language, 
+    Currency, 
+    Periodicity, 
+    Role, 
+    RequestType, 
+    RequestStatus, 
+    RequestSource, 
+    UserRequest, 
+    CreditRequestDetail, 
+    InvestmentRequestDetail
+    )
 from django import forms
 from .models import Transaction, Credit
 from django.db.models import Q
@@ -236,3 +265,98 @@ class InstallmentAdmin(admin.ModelAdmin):
     search_fields = ('credit__id','credit__client__name','number')
     readonly_fields = ('created_at','updated_at')
     ordering = ('-due_date',)
+
+@admin.register(RequestType)
+class RequestTypeAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'requires_approval', 'description', 'is_active')
+    search_fields = ('code', 'name')
+
+@admin.register(RequestStatus)
+class RequestStatusAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name','description', 'is_active')
+    search_fields = ('code', 'name')
+
+@admin.register(RequestSource)
+class RequestSourceAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name')
+    search_fields = ('code', 'name')
+
+@admin.register(UserRequest)
+class UserRequestAdmin(admin.ModelAdmin):
+    list_display = ('request_id', 'user', 'type', 'status', 'source', 'created_at')
+    search_fields = ('request_id', 'user__username', 'type__name', 'status__name')
+    list_filter = ('type', 'status', 'source')
+    date_hierarchy = 'created_at'
+
+@admin.register(CreditRequestDetail)
+class CreditRequestDetailAdmin(admin.ModelAdmin):
+    list_display = ('request', 'amount', 'term_days', 'purpose')
+    search_fields = ('request__request_id', 'purpose')
+
+@admin.register(InvestmentRequestDetail)
+class InvestmentRequestDetailAdmin(admin.ModelAdmin):
+    list_display = ('request', 'investement_amount', 'risk_tolerance', 'investment_goal')
+    search_fields = ('request__request_id', 'goal', 'investor_type')
+
+# from django.db import migrations
+
+# def create_initial_request_data(apps, schema_editor):
+#     RequestType = apps.get_model('user_requests', 'RequestType')
+#     RequestStatus = apps.get_model('user_requests', 'RequestStatus')
+#     RequestSource = apps.get_model('user_requests', 'RequestSource')
+
+#     # RequestType
+#     types = [
+#         ("credit", "Solicitud de Crédito", "Cliente solicita un crédito o préstamo."),
+#         ("investment", "Solicitud de Inversión", "Cliente desea invertir dinero."),
+#         ("extend_term", "Ampliación de Plazo", "Solicita más tiempo para pagar el crédito."),
+#         ("refinance", "Refinanciación", "Desea renegociar o consolidar el crédito."),
+#         ("early_discount", "Pronto Pago", "Solicita descuento por pago anticipado."),
+#         ("expand_investment", "Ampliar Inversión", "Desea aumentar el monto invertido."),
+#         ("withdraw", "Retiro", "Desea retirar fondos de su inversión."),
+#         ("reinvest", "Reinversión", "Desea reinvertir capital o rendimientos.")
+#     ]
+#     for code, name, desc in types:
+#         RequestType.objects.get_or_create(code=code, defaults={"name": name, "description": desc})
+
+#     # RequestStatus
+#     statuses = [
+#         ("pending", "Pendiente", "Aún no ha sido procesada."),
+#         ("approved", "Aprobada", "La solicitud fue aceptada."),
+#         ("rejected", "Rechazada", "La solicitud fue rechazada."),
+#         ("cancelled", "Cancelada", "Cancelada por el cliente o el sistema."),
+#         ("completed", "Completada", "La solicitud fue ejecutada.")
+#     ]
+#     for code, name, desc in statuses:
+#         RequestStatus.objects.get_or_create(code=code, defaults={"name": name, "description": desc})
+
+#     # RequestSource
+#     sources = [
+#         ("web", "Aplicación Web", "Solicitud enviada desde el sitio web."),
+#         ("mobile", "App Móvil", "Solicitud enviada desde la app móvil."),
+#         ("admin", "Panel Administrativo", "Registrada manualmente por staff."),
+#         ("verbal", "Verbal", "Registrada por un asesor tras solicitud verbal."),
+#         ("chatbot", "Chatbot", "Solicitud vía asistente virtual."),
+#         ("api", "API", "Enviada desde una integración externa.")
+#     ]
+#     for code, name, desc in sources:
+#         RequestSource.objects.get_or_create(code=code, defaults={"name": name, "description": desc})
+
+# def reverse_func(apps, schema_editor):
+#     RequestType = apps.get_model('user_requests', 'RequestType')
+#     RequestStatus = apps.get_model('user_requests', 'RequestStatus')
+#     RequestSource = apps.get_model('user_requests', 'RequestSource')
+#     RequestType.objects.all().delete()
+#     RequestStatus.objects.all().delete()
+#     RequestSource.objects.all().delete()
+
+# class Migration(migrations.Migration):
+
+#     dependencies = [
+#         # Reemplaza con tu última migración
+#         ('user_requests', '000X_previous_migration'),
+#     ]
+
+#     operations = [
+#         migrations.RunPython(create_initial_request_data, reverse_func),
+#     ]

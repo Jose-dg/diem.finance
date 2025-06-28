@@ -5,6 +5,7 @@ from django.db import transaction as db_transaction
 from django.db import models, transaction as db_transaction
 from django.utils import timezone
 from decimal import ROUND_HALF_UP, Decimal
+from django.conf import settings
 
 import uuid
 import math
@@ -203,6 +204,148 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+    
+    monthly_income = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,help_text="Ingreso mensual del usuario.")
+    monthly_expenses = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,help_text="Gastos mensuales del usuario.")
+    monthly_savings = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,help_text="Ahorro mensual del usuario.")
+    monthly_investments = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,help_text="Inversiones mensuales del usuario.")
+    monthly_debt = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,help_text="Deuda mensual del usuario.")
+    monthly_credit_payments = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,help_text="Pagos de crédito mensuales del usuario.")
+    
+    income_source = models.CharField(max_length=255, null=True, blank=True,help_text="Fuente de ingresos del usuario.")
+    employment_type = models.CharField(max_length=20, choices=[
+            ('FULL_TIME', 'Tiempo Completo'),
+            ('PART_TIME', 'Medio Tiempo'),
+            ('CONTRACTOR', 'Contratista'),
+            ('SELF_EMPLOYED', 'Independiente'),
+            ('UNEMPLOYED', 'Desempleado'),
+            ('RETIRED', 'Jubilado'),
+        ], null=True, blank=True, help_text="Tipo de empleo del usuario.")
+    
+    investment_experience = models.CharField(max_length=255, null=True, blank=True,help_text="Experiencia en inversiones del usuario.")
+    
+    risk_tolerance = models.CharField(max_length=20, choices=[
+            ('VERY_LOW', 'Muy Bajo'),
+            ('LOW', 'Bajo'),
+            ('MODERATE', 'Moderado'),
+            ('HIGH', 'Alto'),
+            ('VERY_HIGH', 'Muy Alto'),
+        ], default='MODERATE', help_text="Tolerancia al riesgo del usuario."
+    )
+    
+    # Verificación de información
+    info_verified = models.BooleanField(default=False,help_text="Verificación de información del usuario")
+
+    can_request_credit = models.BooleanField(default=True, help_text="Indica si el usuario puede solicitar créditos")
+    
+    # Ratio deuda/ingreso calculado automáticamente
+    debt_to_income_ratio = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Ratio deuda/ingreso calculado automáticamente")
+    restriction_reason = models.TextField(null=True, blank=True, help_text="Razón por la cual el usuario tiene restricciones")
+    financial_health_score = models.IntegerField(null=True, blank=True, help_text="Puntaje de salud financiera (0-100)")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Perfil de Usuario"
+        verbose_name_plural = "Perfiles de Usuario"
+
+    def __str__(self):
+        return f"{self.user.username} - Perfil"
+    
+    def can_create_request(self, request_type):
+        """Valida si el usuario puede crear un tipo específico de solicitud"""
+        if not request_type:
+            return False, "Tipo de solicitud no especificado"
+        
+        # Verificar si el tipo de solicitud requiere perfil completo
+        if request_type.requires_complete_profile and not self.is_profile_complete:
+            return False, "Debe completar su perfil financiero para este tipo de solicitud"
+        
+        # Verificar restricciones específicas por tipo
+        if 'credit' in request_type.name.lower() or 'crédito' in request_type.name.lower():
+            if not self.can_request_credit:
+                return False, self.restriction_reason or "No puede solicitar créditos en este momento"
+        
+        if 'investment' in request_type.name.lower() or 'inversión' in request_type.name.lower():
+            if not self.can_request_investment:
+                return False, self.restriction_reason or "No puede solicitar inversiones en este momento"
+        
+        return True, "Solicitud permitida"
+
+    def calculate_debt_to_income_ratio(self):
+        """Calcula automáticamente el ratio deuda/ingreso"""
+        if self.monthly_income and self.monthly_debt:
+            if self.monthly_income > 0:
+                ratio = (self.monthly_debt / self.monthly_income) * 100
+                self.debt_to_income_ratio = round(ratio, 2)
+                return self.debt_to_income_ratio
+        return None
+
+    def calculate_financial_health_score(self):
+        """Calcula el puntaje de salud financiera y lo almacena"""
+        if not self.monthly_income:
+            self.financial_health_score = None
+            return None
+        
+        score = 0
+        
+        # Tiene ahorros
+        if self.monthly_savings and self.monthly_savings > 0:
+            score += 25
+        
+        # Tiene inversiones
+        if self.monthly_investments and self.monthly_investments > 0:
+            score += 25
+        
+        # Ratio deuda/ingreso saludable (menos del 30%)
+        if self.debt_to_income_ratio and self.debt_to_income_ratio < 30:
+            score += 25
+        
+        # Gastos controlados (menos del 80% de ingresos)
+        if self.monthly_expenses and self.monthly_income:
+            expense_ratio = (self.monthly_expenses / self.monthly_income) * 100
+            if expense_ratio < 80:
+                score += 25
+        
+        self.financial_health_score = score
+        return score
+
+    def save(self, *args, **kwargs):
+        """Override save para calcular automáticamente métricas"""
+        self.calculate_debt_to_income_ratio()
+        self.calculate_financial_health_score()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_profile_complete(self):
+        """Verifica si el perfil tiene la información básica completa"""
+        required_fields = [
+            self.monthly_income,
+            self.monthly_expenses,
+            self.employment_type,
+            self.income_source
+        ]
+        return all(field is not None and field != '' for field in required_fields)
+
+    @property
+    def financial_health_category(self):
+        """Categoriza la salud financiera basada en el score"""
+        if self.financial_health_score is None:
+            return "Sin evaluar"
+        
+        if self.financial_health_score >= 75:
+            return "Excelente"
+        elif self.financial_health_score >= 50:
+            return "Buena"
+        elif self.financial_health_score >= 25:
+            return "Regular"
+        else:
+            return "Necesita mejoras"
+
 class Credit(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
@@ -395,3 +538,172 @@ class Installment(models.Model):
 
     def __str__(self):
         return f"Cuota #{self.number or '?'} de {self.credit_id} - Vence: {self.due_date or 'sin fecha'} - Pagada: {self.paid}"
+
+class InterestRateCategory(models.Model):
+    
+    subcategory = models.OneToOneField(SubCategory, null=True, blank=True, on_delete=models.CASCADE, related_name='interest_rate_config')
+    description = models.TextField(null=True, blank=True, help_text="Descripción de la categoría")
+    base_rate = models.DecimalField(max_digits=5, decimal_places=2, help_text="Tasa base para esta categoría (%)")
+
+    max_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Monto máximo permitido")
+    max_term_days = models.IntegerField(null=True, blank=True, help_text="Plazo máximo en días")
+
+    is_active = models.BooleanField(default=True, help_text="Indica si la categoría está activa")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Categoría de Tasa de Interés"
+        verbose_name_plural = "Categorías de Tasas de Interés"
+        ordering = ['-created_at']  
+
+    def __str__(self):
+        if self.subcategory:
+            return f"{self.subcategory.name} - {self.base_rate}%"
+        return f"Sin subcategoría - {self.base_rate}%"
+
+class UserInterestRate(models.Model):
+    """Tasas de interés personalizadas por usuario y categoría"""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='interest_rates')
+    category = models.ForeignKey(InterestRateCategory, on_delete=models.CASCADE, related_name='user_rates')
+    
+    # Tasa personalizada
+    custom_rate = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        help_text="Tasa de interés personalizada para este usuario (%)"
+    )
+
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='approved_rates',
+        help_text="Usuario que aprobó esta tasa personalizada"
+    )
+    
+    # Control de vigencia
+    effective_date = models.DateTimeField(
+        default=timezone.now,
+        help_text="Fecha desde la cual es efectiva la tasa"
+    )
+    expiry_date = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        help_text="Fecha de vencimiento de la tasa personalizada"
+    )
+    
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Tasa de Interés de Usuario"
+        verbose_name_plural = "Tasas de Interés de Usuarios"
+        unique_together = ['user', 'category']
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.category.name} - {self.custom_rate}%"
+
+    def is_valid(self):
+        """Verifica si la tasa personalizada está vigente"""
+        now = timezone.now()
+        if self.effective_date > now:
+            return False
+        if self.expiry_date and self.expiry_date < now:
+            return False
+        return True
+
+class RequestType(models.Model):
+    code = models.UUIDField (default=uuid.uuid4, editable=False, unique=True, help_text="Código del tipo de solicitud")
+    name = models.CharField(max_length=100, help_text="Nombre del tipo de solicitud, Ejemplo: 'Solicitud de Crédito', 'Solicitud de Préstamo', 'Solicitud de Refinanciamiento', 'Soliciud de plazo fijo'")
+    requires_approval = models.BooleanField(default=True, help_text="Indica si la solicitud requiere aprobación")
+    description = models.TextField(blank=True, null=True, help_text="Descripción del tipo de solicitud")
+    is_active = models.BooleanField(default=True, help_text="Indica si el tipo de solicitud está activo")
+    
+    def __str__(self):
+        return self.name
+    
+class RequestStatus(models.Model):
+    code = models.UUIDField (default=uuid.uuid4, editable=False, unique=True, help_text="Código del estado de la solicitud")
+    name = models.CharField(max_length=100, help_text="Nombre del estado de la solicitud, por ejemplo: 'Pendiente', 'Aprobado', 'Cancelado','Rechazado'")
+    description = models.TextField(blank=True, null=True, help_text="Descripción del estado de la solicitud")
+    is_active = models.BooleanField(default=True, help_text="Indica si el estado de la solicitud está activo")
+
+    def __str__(self):
+        return self.name
+
+class RequestSource(models.Model):
+    code = models.UUIDField (default=uuid.uuid4, editable=False, unique=True, help_text="Código de la fuente de la solicitud")
+    name = models.CharField(max_length=100, help_text="Nombre de la fuente de la solicitud, por ejemplo: 'Web', 'App', 'Teléfono', 'Correo Electrónico', 'Chatbot', 'API', 'Chat'")
+    description = models.TextField(blank=True, null=True, help_text="Descripción de la fuente de la solicitud")
+    is_active = models.BooleanField(default=True, help_text="Indica si la fuente de la solicitud está activo")
+
+    def __str__(self):
+        return self.name
+
+class UserRequest(models.Model):
+    request_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, help_text="Código de la solicitud")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='requests', help_text="Usuario que realizó la solicitud")
+    type = models.ForeignKey(RequestType, on_delete=models.SET_NULL, null=True, blank=True, related_name='user_requests')
+    status = models.ForeignKey(RequestStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name='user_requests')
+    source = models.ForeignKey(RequestSource, on_delete=models.SET_NULL, null=True, blank=True, related_name='user_requests')
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_requests', help_text="Usuario asignado a la solicitud")
+    
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Fecha y hora en que se creó la solicitud.")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Última fecha de actualización de la solicitud.")
+    notes = models.CharField(max_length=255, blank=True, null=True, help_text="Notas adicionales opcionales sobre la solicitud.")
+
+    class Meta:
+        verbose_name = "Solicitud"
+        verbose_name_plural = "Solicitudes"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'type', 'status', 'source']),
+            models.Index(fields=['user', 'type', 'status', 'source', 'assigned_to']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user} - {self.type} - {self.status} - {self.source}"
+
+class CreditRequestDetail(models.Model):
+    request = models.OneToOneField(UserRequest, on_delete=models.CASCADE, related_name="credit_detail", help_text="Referencia a la solicitud general de tipo crédito.")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, help_text="Monto solicitado para el crédito.")
+    term_days = models.IntegerField(help_text="Plazo en días para el crédito.")
+    purpose = models.CharField(
+        max_length=20,
+        choices=[
+            ('HOUSING', 'Vivienda'),
+            ('VEHICLE', 'Vehículo'),
+            ('EDUCATION', 'Educación'),
+            ('INVESTMENT', 'Inversión'),
+            ('PERSONAL', 'Personal'),
+            ('DEBT_CONSOLIDATION', 'Consolidación de deuda'),
+            ('BUSINESS', 'Negocio'),
+            ('OTHER', 'Otro'),
+        ],
+        null=True,
+        blank=True,
+        help_text="Propósito del crédito"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Fecha y hora en que se creó el detalle de la solicitud.")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Última fecha de actualización del detalle de la solicitud.")
+
+    def __str__(self):
+        return f"Crédito: {self.amount} por {self.term_days} días"
+
+class InvestmentRequestDetail(models.Model):
+    request = models.OneToOneField(UserRequest, on_delete=models.CASCADE, related_name="investment_detail", help_text="Referencia a la solicitud general de tipo inversión.")
+    investement_amount = models.DecimalField(max_digits=12, decimal_places=2, help_text="Monto que se desea invertir.")
+    investment_horizon = models.IntegerField(help_text="Plazo de la inversión.")
+    risk_tolerance = models.CharField(max_length=255, help_text="Tolerancia al riesgo (Ej: conservador, moderado, arriesgado).")    
+    investment_goal = models.CharField(max_length=255, help_text="Objetivo de la inversión (Ej: ahorro, aumentar patrimonio, etc).")
+    # investor_type = models.CharField(max_length=255, help_text="Tipo de inversionista (Ej: conservador, arriesgado, estratégico).") Este esta repetido hya que eliminarlo
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Fecha y hora en que se creó el detalle de la solicitud.")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Última fecha de actualización del detalle de la solicitud.")
+
+    def __str__(self):
+        return f"Inversión: {self.investement_amount} - {self.investor_type}"  # Cambia amount por investement_amount

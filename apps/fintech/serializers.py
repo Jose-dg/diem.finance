@@ -192,6 +192,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
+    
     def get_token(cls, user):
         token = super().get_token(user)
 
@@ -199,8 +200,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['id'] = user.id
         token['username'] = user.username
         token['email'] = user.email
-        token['first_name'] = user.first_name
+        
         token['last_name'] = user.last_name
+
+        token['is_staff'] = user.is_staff
+        token['is_superuser'] = user.is_superuser
+        token['is_active'] = user.is_active
         return token
 
     def validate(self, attrs):
@@ -209,11 +214,157 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'id': self.user.id,
             'username': self.user.username,
             'email': self.user.email,
-            'first_name': self.user.first_name,
             'last_name': self.user.last_name,
+            'is_staff': self.user.is_staff,
+            'is_superuser': self.user.is_superuser,
+            'is_active': self.user.is_active,
+
         }
         return data
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
+
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+    
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'confirm_password', 'first_name', 'last_name']
+    
+    def validate(self, attrs):
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError("Las contraseñas no coinciden")
+        return attrs
+    
+    def create(self, validated_data):
+        validated_data.pop('confirm_password')
+        user = User.objects.create_user(**validated_data)
+        return user
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = '__all__'
+        read_only_fields = ['user', 'debt_to_income_ratio', 'financial_health_score']
+
+class RequestTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RequestType
+        fields = ['code', 'name', 'description', 'requires_approval', 'is_active']
+
+class RequestStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RequestStatus
+        fields = ['code', 'name', 'description', 'is_active']
+
+class RequestSourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RequestSource
+        fields = ['code', 'name', 'description', 'is_active']
+
+class UserRequestSerializer(serializers.ModelSerializer):
+    type = RequestTypeSerializer(read_only=True)
+    status = RequestStatusSerializer(read_only=True)
+    source = RequestSourceSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = UserRequest
+        fields = '__all__'
+        read_only_fields = ['request_id', 'created_at', 'updated_at']
+
+class CreditRequestDetailSerializer(serializers.ModelSerializer):
+    request = UserRequestSerializer(read_only=True)
+    
+    class Meta:
+        model = CreditRequestDetail
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+class InvestmentRequestDetailSerializer(serializers.ModelSerializer):
+    request = UserRequestSerializer(read_only=True)
+    
+    class Meta:
+        model = InvestmentRequestDetail
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+class ClientCreditsQuerySerializer(serializers.Serializer):
+    """
+    Serializer para consultar créditos de un cliente por documento y/o nombre
+    """
+    document_number = serializers.CharField(
+        max_length=20, 
+        required=False, 
+        help_text="Número de documento del cliente"
+    )
+    first_name = serializers.CharField(
+        max_length=150, 
+        required=False, 
+        help_text="Primer nombre del cliente"
+    )
+    last_name = serializers.CharField(
+        max_length=150, 
+        required=False, 
+        help_text="Apellido del cliente"
+    )
+    
+    def validate(self, attrs):
+        """
+        Valida que al menos se proporcione documento o nombre
+        """
+        document_number = attrs.get('document_number')
+        first_name = attrs.get('first_name')
+        last_name = attrs.get('last_name')
+        
+        if not document_number and not first_name and not last_name:
+            raise serializers.ValidationError(
+                "Debe proporcionar al menos un criterio de búsqueda: "
+                "document_number, first_name o last_name"
+            )
+        
+        return attrs
+
+class ClientCreditsResponseSerializer(serializers.ModelSerializer):
+    """
+    Serializer para la respuesta de créditos de un cliente
+    """
+    user = UserSerializer(read_only=True)
+    subcategory = SubCategorySerializer(read_only=True)
+    currency = CurrencySerializer(read_only=True)
+    periodicity_days = serializers.IntegerField(source='periodicity.days', read_only=True)
+    payments = serializers.SerializerMethodField()
+    installments = InstallmentSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Credit
+        fields = [
+            'uid', 'user', 'state', 'subcategory', 'price', 'pending_amount',
+            'total_abonos', 'currency', 'periodicity_days', 'installment_number',
+            'installment_value', 'first_date_payment', 'second_date_payment',
+            'created_at', 'payments', 'installments', 'is_in_default',
+            'morosidad_level', 'earnings', 'interest'
+        ]
+    
+    def get_payments(self, obj):
+        """Obtiene los pagos del crédito"""
+        qs = AccountMethodAmount.objects.filter(
+            credit=obj
+        ).select_related('transaction', 'currency').order_by('transaction__date')
+
+        return [
+            {
+                "payment_method": AccountSerializer(p.payment_method).data,
+                "payment_code": p.payment_code,
+                "amount": p.amount,
+                "amount_paid": p.amount_paid,
+                "currency": p.currency.currency if p.currency else "No currency",
+                "transaction_date": p.transaction.date if p.transaction else None,
+            }
+            for p in qs
+        ]
