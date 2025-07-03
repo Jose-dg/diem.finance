@@ -214,12 +214,15 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'id': self.user.id,
             'username': self.user.username,
             'email': self.user.email,
+            'first_name': self.user.first_name,
             'last_name': self.user.last_name,
             'is_staff': self.user.is_staff,
             'is_superuser': self.user.is_superuser,
             'is_active': self.user.is_active,
 
         }
+
+        print(data)
         return data
 
 class StandardResultsSetPagination(PageNumberPagination):

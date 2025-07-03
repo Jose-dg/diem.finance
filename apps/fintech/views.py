@@ -23,7 +23,7 @@ from decimal import Decimal
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.fintech.serializers import CustomTokenObtainPairSerializer
-from django.db.models import Sum
+from django.db.models import Sum, Count
 
 from .models import (
     AccountMethodAmount,
@@ -455,7 +455,7 @@ class ClientCreditsView(APIView):
             last_name = data.get('last_name')
             
             # Construir filtros para buscar usuarios
-            from django.db.models import Q
+            from django.db.models import Q, Sum, Count
             
             # Inicializar filtros
             user_filters = Q()
@@ -474,8 +474,18 @@ class ClientCreditsView(APIView):
             elif last_name:
                 user_filters &= Q(last_name__icontains=last_name)
             
-            # Buscar usuarios que coincidan con los criterios
-            users = User.objects.filter(user_filters).select_related('document')
+            # Buscar usuarios que coincidan con los criterios con optimización
+            users = User.objects.filter(user_filters).select_related(
+                'document__document_type'
+            ).prefetch_related(
+                'credits__subcategory__category',
+                'credits__currency',
+                'credits__periodicity',
+                'credits__installments',
+                'credits__payments__payment_method',
+                'credits__payments__currency',
+                'credits__payments__transaction'
+            )
             
             if not users.exists():
                 return Response({
@@ -486,29 +496,57 @@ class ClientCreditsView(APIView):
                     'total_paid': 0
                 }, status=status.HTTP_200_OK)
             
-            # Obtener todos los créditos de los usuarios encontrados
-            user_ids = users.values_list('id', flat=True)
-            credits = Credit.objects.filter(
+            # Obtener todos los créditos de los usuarios encontrados con una sola consulta optimizada
+            user_ids = list(users.values_list('id', flat=True))
+            
+            # Consulta optimizada para créditos con agregaciones
+            credits_data = Credit.objects.filter(
                 user_id__in=user_ids
             ).select_related(
-                'user', 'subcategory', 'currency', 'periodicity'
+                'user__document__document_type',
+                'subcategory__category',
+                'currency',
+                'periodicity'
             ).prefetch_related(
+                'installments',
                 'payments__payment_method',
-                'installments'
+                'payments__currency',
+                'payments__transaction'
             ).order_by('-created_at')
             
-            # Serializar los créditos
-            credits_serializer = ClientCreditsResponseSerializer(credits, many=True)
+            # Calcular totales usando agregaciones de base de datos (mucho más rápido)
+            totals = credits_data.aggregate(
+                total_credits=Count('id'),
+                total_pending=Sum('pending_amount'),
+                total_paid=Sum('total_abonos')
+            )
             
-            # Calcular totales
-            total_credits = credits.count()
-            total_pending = sum(credit.pending_amount or 0 for credit in credits)
-            total_paid = sum(credit.total_abonos or 0 for credit in credits)
+            # Calcular estadísticas por cliente usando agregaciones
+            client_stats = credits_data.values('user_id').annotate(
+                credits_count=Count('id'),
+                total_pending=Sum('pending_amount'),
+                total_paid=Sum('total_abonos')
+            )
             
-            # Información de los clientes encontrados
+            # Crear diccionario para acceso rápido a estadísticas por cliente
+            client_stats_dict = {
+                stat['user_id']: {
+                    'credits_count': stat['credits_count'],
+                    'total_pending': float(stat['total_pending'] or 0),
+                    'total_paid': float(stat['total_paid'] or 0)
+                }
+                for stat in client_stats
+            }
+            
+            # Información de los clientes encontrados (optimizada)
             clients_info = []
             for user in users:
-                user_credits = credits.filter(user=user)
+                user_stats = client_stats_dict.get(user.id, {
+                    'credits_count': 0,
+                    'total_pending': 0.0,
+                    'total_paid': 0.0
+                })
+                
                 clients_info.append({
                     'id': user.id,
                     'username': user.username,
@@ -516,20 +554,23 @@ class ClientCreditsView(APIView):
                     'last_name': user.last_name,
                     'email': user.email,
                     'document_number': user.document.document_number if user.document else None,
-                    'document_type': user.document.document_type.description if user.document else None,
-                    'credits_count': user_credits.count(),
-                    'total_pending': sum(credit.pending_amount or 0 for credit in user_credits),
-                    'total_paid': sum(credit.total_abonos or 0 for credit in user_credits)
+                    'document_type': user.document.document_type.description if user.document and user.document.document_type else None,
+                    'credits_count': user_stats['credits_count'],
+                    'total_pending': user_stats['total_pending'],
+                    'total_paid': user_stats['total_paid']
                 })
             
+            # Serializar los créditos (ahora con datos precargados)
+            credits_serializer = ClientCreditsResponseSerializer(credits_data, many=True)
+            
             return Response({
-                'message': f'Se encontraron {total_credits} créditos para {len(clients_info)} cliente(s)',
+                'message': f'Se encontraron {totals["total_credits"]} créditos para {len(clients_info)} cliente(s)',
                 'clients': clients_info,
                 'credits': credits_serializer.data,
                 'summary': {
-                    'total_credits': total_credits,
-                    'total_pending': float(total_pending),
-                    'total_paid': float(total_paid),
+                    'total_credits': totals['total_credits'],
+                    'total_pending': float(totals['total_pending'] or 0),
+                    'total_paid': float(totals['total_paid'] or 0),
                     'clients_count': len(clients_info)
                 }
             }, status=status.HTTP_200_OK)
