@@ -18,6 +18,9 @@ from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmoun
 from apps.fintech.serializers import StandardResultsSetPagination
 from apps.fintech.serializers import CreditSerializer, CreditFilterSerializer
 
+from apps.fintech.utils.kpi import kpi_summary
+from datetime import datetime
+
 class FinanceView(APIView):
     def post(self, request):
         try:
@@ -369,3 +372,20 @@ class CreditFilterAPIView(APIView):
             print("❗ Error inesperado:", str(e))
             return Response({"error": str(e)}, status=500)
 
+class CreditKPIView(APIView):
+    """
+    API para consultar KPIs de créditos entre dos fechas.
+    Recibe start_date y end_date como parámetros GET (YYYY-MM-DD).
+    """
+    def get(self, request):
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        if not start_date or not end_date:
+            return Response({'error': 'Debe enviar start_date y end_date en formato YYYY-MM-DD'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'error': 'Formato de fecha inválido. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+        data = kpi_summary(start_date, end_date)
+        return Response(data, status=status.HTTP_200_OK)

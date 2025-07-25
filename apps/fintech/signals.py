@@ -1,7 +1,7 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 
-from apps.fintech.utils import distribuir_pago_a_cuotas, generar_cuotas, recalculate_credit
+from apps.fintech.utils.root import distribuir_pago_a_cuotas, generar_cuotas, recalculate_credit
 from .models import CreditAdjustment, Transaction, AccountMethodAmount, Credit
 from datetime import datetime
 from django.utils import timezone

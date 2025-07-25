@@ -2,7 +2,7 @@ from decimal import Decimal
 import uuid
 from rest_framework import viewsets
 
-from apps.fintech.utils import recalculate_credit
+from apps.fintech.utils.root import recalculate_credit
 from .models import ( 
    User, 
    Account, 
