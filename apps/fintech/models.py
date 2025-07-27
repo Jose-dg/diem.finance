@@ -593,3 +593,5 @@ class Installment(models.Model):
 
     def __str__(self):
         return f"Cuota #{self.number or '?'} de {self.credit_id} - Vence: {self.due_date or 'sin fecha'} - Estado: {self.status}"
+
+

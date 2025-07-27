@@ -254,11 +254,66 @@ class CreditAdjustmentAdmin(admin.ModelAdmin):
 
 @admin.register(Installment)
 class InstallmentAdmin(admin.ModelAdmin):
-    list_display = ('credit', 'number', 'due_date', 'amount', 'principal_amount', 'interest_amount', 'late_fee', 'paid', 'paid_on')
-    list_filter = ('paid','due_date','credit')
-    search_fields = ('credit__id','credit__client__name','number')
-    readonly_fields = ('created_at','updated_at')
+    # Campos principales
+    list_display = (
+        'credit_uid', 'number', 'due_date', 'amount', 'status', 
+        'paid', 'remaining_amount'
+    )
+    
+    # Filtros rápidos
+    list_filter = (
+        'status', 'paid', 'is_scheduled',
+        ('due_date', admin.DateFieldListFilter),
+    )
+    
+    # Búsqueda simple
+    search_fields = ('credit__uid', 'number')
+    
+    # Solo lectura
+    readonly_fields = (
+        'created_at', 'updated_at', 'days_overdue', 
+        'remaining_amount', 'amount_paid'
+    )
+    
+    # Ordenamiento
     ordering = ('-due_date',)
+    
+    # Paginación optimizada
+    list_per_page = 20  # Menos registros por página
+    list_max_show_all = 100  # Máximo para "mostrar todo"
+    
+    # Optimización de consultas
+    list_select_related = ('credit', 'credit__user')
+    
+    def credit_uid(self, obj):
+        """UID compacto"""
+        return obj.credit.uid[:8] + '...' if obj.credit else 'N/A'
+    credit_uid.short_description = 'Credit UID'
+    credit_uid.admin_order_field = 'credit__uid'
+    
+    def get_queryset(self, request):
+        """Consulta optimizada con paginación"""
+        qs = super().get_queryset(request).select_related(
+            'credit', 'credit__user'
+        ).only(
+            'id', 'number', 'due_date', 'amount', 'status', 'paid', 
+            'remaining_amount', 'credit__uid', 'credit__user__username'
+        )
+        
+        # Filtrar por defecto si no hay filtros aplicados
+        if not request.GET.get('status') and not request.GET.get('paid'):
+            qs = qs.filter(status='pending')
+        
+        return qs
+    
+    # Deshabilitar creación/eliminación
+    def has_add_permission(self, request):
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 
 
 
