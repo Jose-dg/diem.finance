@@ -47,7 +47,6 @@ THIRD_PARTY_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'import_export',
-    'oauth2_provider',
     'django_filters',
 ]
 
@@ -211,15 +210,7 @@ REST_FRAMEWORK = {
     ],
 }
 
-# REST_FRAMEWORK = {
-#  'DEFAULT_AUTHENTICATION_CLASSES': (
-#     'oauth2_provider.contrib.rest_framework.OAuth2Authentication', 
-#     'rest_framework_simplejwt.authentication.JWTAuthentication',
-#  ),
-#      'DEFAULT_PERMISSION_CLASSES': (
-#         'rest_framework.permissions.IsAuthenticated',
-#     ),
-# }
+
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',
@@ -268,12 +259,7 @@ SIMPLE_JWT = {
     "SLIDING_TOKEN_REFRESH_SERIALIZER": "rest_framework_simplejwt.serializers.TokenRefreshSlidingSerializer",
 }
 
-OAUTH2_PROVIDER = {
-    'ACCESS_TOKEN_EXPIRE_SECONDS': 36000,
-    'APPLICATION_MODEL': 'oauth2_provider.Application',
-    'REFRESH_TOKEN_EXPIRE_SECONDS': 36000,
-    'AUTHORIZATION_CODE_EXPIRE_SECONDS': 36000,
-}
+
 
 CELERY_BROKER_URL = env('REDIS_URL')
 CELERY_RESULT_BACKEND = env('REDIS_URL')
@@ -286,6 +272,22 @@ CELERY_BEAT_SCHEDULE = {
     'recalc-credits-nightly': {
         'task': 'apps.fintech.tasks.batch_recalculate_credits',
         'schedule': crontab(hour=2, minute=0),
+    },
+    'installment-daily-maintenance': {
+        'task': 'apps.fintech.tasks.installment_daily_maintenance',
+        'schedule': crontab(hour=6, minute=0),  # 6:00 AM
+    },
+    'update-installment-statuses': {
+        'task': 'apps.fintech.tasks.update_installment_statuses',
+        'schedule': crontab(minute='*/30'),  # Cada 30 minutos
+    },
+    'send-payment-reminders': {
+        'task': 'apps.fintech.tasks.send_payment_reminders',
+        'schedule': crontab(hour=9, minute=0),  # 9:00 AM
+    },
+    'send-overdue-notifications': {
+        'task': 'apps.fintech.tasks.send_overdue_notifications',
+        'schedule': crontab(hour=10, minute=0),  # 10:00 AM
     },
 }
 

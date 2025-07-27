@@ -23,13 +23,7 @@ from .models import (
     Language, 
     Currency, 
     Periodicity, 
-    Role, 
-    RequestType, 
-    RequestStatus, 
-    RequestSource, 
-    UserRequest, 
-    CreditRequestDetail, 
-    InvestmentRequestDetail
+    Role
     )
 from django import forms
 from .models import Transaction, Credit
@@ -266,37 +260,7 @@ class InstallmentAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at','updated_at')
     ordering = ('-due_date',)
 
-@admin.register(RequestType)
-class RequestTypeAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'requires_approval', 'description', 'is_active')
-    search_fields = ('code', 'name')
 
-@admin.register(RequestStatus)
-class RequestStatusAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name','description', 'is_active')
-    search_fields = ('code', 'name')
-
-@admin.register(RequestSource)
-class RequestSourceAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name')
-    search_fields = ('code', 'name')
-
-@admin.register(UserRequest)
-class UserRequestAdmin(admin.ModelAdmin):
-    list_display = ('request_id', 'user', 'type', 'status', 'source', 'created_at')
-    search_fields = ('request_id', 'user__username', 'type__name', 'status__name')
-    list_filter = ('type', 'status', 'source')
-    date_hierarchy = 'created_at'
-
-@admin.register(CreditRequestDetail)
-class CreditRequestDetailAdmin(admin.ModelAdmin):
-    list_display = ('request', 'amount', 'term_days', 'purpose')
-    search_fields = ('request__request_id', 'purpose')
-
-@admin.register(InvestmentRequestDetail)
-class InvestmentRequestDetailAdmin(admin.ModelAdmin):
-    list_display = ('request', 'investement_amount', 'risk_tolerance', 'investment_goal')
-    search_fields = ('request__request_id', 'goal', 'investor_type')
 
 # from django.db import migrations
 

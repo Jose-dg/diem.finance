@@ -18,7 +18,7 @@ from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmoun
 from apps.fintech.serializers import StandardResultsSetPagination
 from apps.fintech.serializers import CreditSerializer, CreditFilterSerializer
 
-from apps.fintech.utils.kpi import kpi_summary
+from apps.fintech.services.kpi_service import KPIService
 from datetime import datetime
 
 class FinanceView(APIView):
@@ -387,5 +387,5 @@ class CreditKPIView(APIView):
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         except ValueError:
             return Response({'error': 'Formato de fecha inválido. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
-        data = kpi_summary(start_date, end_date)
+        data = KPIService.get_credit_kpi_summary(start_date, end_date)
         return Response(data, status=status.HTTP_200_OK)

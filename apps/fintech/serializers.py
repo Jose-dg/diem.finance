@@ -249,54 +249,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
         return user
 
-class UserProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UserProfile
-        fields = '__all__'
-        read_only_fields = ['user', 'debt_to_income_ratio', 'financial_health_score']
-
-class RequestTypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RequestType
-        fields = ['code', 'name', 'description', 'requires_approval', 'is_active']
-
-class RequestStatusSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RequestStatus
-        fields = ['code', 'name', 'description', 'is_active']
-
-class RequestSourceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RequestSource
-        fields = ['code', 'name', 'description', 'is_active']
-
-class UserRequestSerializer(serializers.ModelSerializer):
-    type = RequestTypeSerializer(read_only=True)
-    status = RequestStatusSerializer(read_only=True)
-    source = RequestSourceSerializer(read_only=True)
-    user = UserSerializer(read_only=True)
-    
-    class Meta:
-        model = UserRequest
-        fields = '__all__'
-        read_only_fields = ['request_id', 'created_at', 'updated_at']
-
-class CreditRequestDetailSerializer(serializers.ModelSerializer):
-    request = UserRequestSerializer(read_only=True)
-    
-    class Meta:
-        model = CreditRequestDetail
-        fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at']
-
-class InvestmentRequestDetailSerializer(serializers.ModelSerializer):
-    request = UserRequestSerializer(read_only=True)
-    
-    class Meta:
-        model = InvestmentRequestDetail
-        fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at']
-
 class ClientCreditsQuerySerializer(serializers.Serializer):
     """
     Serializer para consultar créditos de un cliente por documento y/o nombre
