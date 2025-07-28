@@ -4,11 +4,13 @@ from celery.utils.log import get_task_logger
 from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
+from django.db.models import F
 
 from apps.fintech.models import Credit, Installment
 from apps.fintech.utils import recalculate_credit
 from apps.fintech.services.installment_service import InstallmentService
 from apps.fintech.services.installment_calculator import InstallmentCalculator
+from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
 
 logger = get_task_logger(__name__)
 
@@ -99,23 +101,27 @@ def generate_installments_for_new_credits(self):
     Genera cuotas para créditos nuevos que no las tienen
     """
     try:
-        # Obtener créditos sin cuotas
+        # Buscar créditos sin cuotas
         credits_without_installments = Credit.objects.filter(
             installments__isnull=True
         ).exclude(
-            state__in=['completed', 'cancelled']
+            state__in=['cancelled', 'to_solve']
         )
         
-        generated_count = 0
+        count = 0
         for credit in credits_without_installments:
-            success, message = InstallmentService.generate_installments_for_credit(credit)
-            if success:
-                generated_count += 1
+            try:
+                InstallmentService.generate_installments_for_credit(credit)
+                count += 1
+                logger.info(f"Cuotas generadas para crédito {credit.uid}")
+            except Exception as e:
+                logger.error(f"Error generando cuotas para crédito {credit.uid}: {str(e)}")
         
-        logger.info(f"Se generaron cuotas para {generated_count} créditos")
-        return generated_count
+        logger.info(f"Se generaron cuotas para {count} créditos")
+        return count
+        
     except Exception as e:
-        logger.error(f"Error generando cuotas: {str(e)}")
+        logger.error(f"Error en generación de cuotas: {str(e)}")
         return 0
 
 @shared_task(
@@ -124,78 +130,118 @@ def generate_installments_for_new_credits(self):
 )
 def installment_daily_maintenance(self):
     """
-    Mantenimiento diario de cuotas - OPTIMIZADO
+    Mantenimiento diario de cuotas - TAREA PRINCIPAL
     """
     try:
         logger.info("Iniciando mantenimiento diario de cuotas...")
         
-        # 1. Actualizar estados y montos en batch
+        # 1. Actualizar estados de cuotas
         success, message = InstallmentService.update_all_installment_statuses()
-        logger.info(f"Actualización de estados: {message}")
+        logger.info(f"Estados actualizados: {message}")
         
-        # 2. Actualizar montos restantes
-        success, message = InstallmentService.bulk_update_remaining_amounts()
-        logger.info(f"Actualización de montos: {message}")
-        
-        # 3. Programar recordatorios
+        # 2. Enviar recordatorios
         success, message = InstallmentService.schedule_payment_reminders()
-        logger.info(f"Programación de recordatorios: {message}")
+        logger.info(f"Recordatorios enviados: {message}")
         
-        # 4. Enviar notificaciones de mora
+        # 3. Notificaciones de mora
         success, message = InstallmentService.send_overdue_notifications()
-        logger.info(f"Notificaciones de mora: {message}")
+        logger.info(f"Notificaciones enviadas: {message}")
         
-        # 5. Generar cuotas para créditos nuevos
-        generate_installments_for_new_credits.delay()
+        # 4. Generar cuotas para créditos nuevos
+        count = generate_installments_for_new_credits.delay()
+        logger.info(f"Cuotas generadas: {count}")
         
-        logger.info("Mantenimiento diario de cuotas completado")
+        logger.info("Mantenimiento diario completado exitosamente")
         return True
+        
     except Exception as e:
         logger.error(f"Error en mantenimiento diario: {str(e)}")
         return False
 
+@shared_task
+def check_additional_interest_daily():
+    """
+    Verifica diariamente créditos que necesitan interés adicional
+    """
+    try:
+        from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
+        
+        # Créditos con pagos parciales que no han recibido interés adicional
+        credits_with_partial_payments = Credit.objects.filter(
+            total_abonos__lt=F('price'),
+            state__in=['pending', 'completed']
+        ).exclude(
+            adjustments__type__code='C0001'  # Excluir los que ya tienen interés adicional
+        )
+        
+        applied_count = 0
+        for credit in credits_with_partial_payments:
+            try:
+                if CreditAdjustmentService.should_apply_additional_interest(credit):
+                    amount = CreditAdjustmentService.apply_additional_interest(
+                        credit,
+                        reason=f"Verificación diaria: Total pagado {credit.total_abonos} < Total pactado {credit.price}"
+                    )
+                    if amount > 0:
+                        applied_count += 1
+                        logger.info(f"Interés adicional aplicado a crédito {credit.uid}: ${amount}")
+                        
+            except Exception as e:
+                logger.error(f"Error aplicando interés adicional a crédito {credit.uid}: {str(e)}")
+        
+        logger.info(f"Verificación diaria completada. Interés aplicado a {applied_count} créditos")
+        return applied_count
+        
+    except Exception as e:
+        logger.error(f"Error en verificación diaria de interés adicional: {str(e)}")
+        return 0
 
 @shared_task
 def calculate_installment_fields_batch():
     """Calcula campos para cuotas que necesitan actualización"""
-    print("🔄 Iniciando cálculo masivo de campos de cuotas...")
+    from django.conf import settings
     
+    # Identificar cuotas que necesitan recálculo
+    all_installments = []
+    
+    # 1. Cuotas que vencen hoy
     today = timezone.now().date()
-    
-    # Cuotas que vencen hoy
     due_today = Installment.objects.filter(
         due_date=today,
         status='pending'
     )
+    all_installments.extend(due_today)
     
-    # Cuotas con más de 30 días de mora
-    overdue_30 = Installment.objects.filter(
-        due_date__lt=today - timedelta(days=30),
-        status__in=['pending', 'partial']
+    # 2. Cuotas con mora alta (30+ días)
+    overdue_30_plus = Installment.objects.filter(
+        status__in=['pending', 'partial'],
+        due_date__lt=today - timedelta(days=30)
     )
+    all_installments.extend(overdue_30_plus)
     
-    # Cuotas con pagos parciales recientes
-    recent_partials = Installment.objects.filter(
+    # 3. Cuotas con pagos parciales recientes
+    recent_partial = Installment.objects.filter(
         status='partial',
         updated_at__gte=timezone.now() - timedelta(hours=24)
     )
+    all_installments.extend(recent_partial)
     
-    # Cuotas que necesitan recálculo según periodicidad
-    needs_recalc = Installment.objects.filter(
-        status='pending',
-        updated_at__lt=timezone.now() - timedelta(hours=6)
-    )
+    # 4. Cuotas que necesitan recálculo general
+    for installment in Installment.objects.filter(status__in=['pending', 'partial']):
+        if InstallmentCalculator.should_recalculate(installment):
+            all_installments.append(installment)
     
-    # Combinar todas las cuotas que necesitan cálculo
-    all_installments = (due_today | overdue_30 | recent_partials | needs_recalc).distinct()
+    # Eliminar duplicados
+    unique_installments = list(set(all_installments))
     
+    # Procesar en lotes
     processed_count = 0
-    for installment in all_installments:
+    for installment in unique_installments:
         try:
-            # Limpiar cache anterior
+            # Limpiar cache
             InstallmentCalculator.clear_cache(installment.id)
             
-            # Calcular campos (esto actualiza el cache)
+            # Recalcular campos
             InstallmentCalculator.get_remaining_amount(installment)
             InstallmentCalculator.get_days_overdue(installment)
             InstallmentCalculator.get_late_fee(installment)
@@ -203,128 +249,120 @@ def calculate_installment_fields_batch():
             processed_count += 1
             
         except Exception as e:
-            print(f"❌ Error procesando cuota {installment.id}: {e}")
+            logger.error(f"Error procesando cuota {installment.id}: {str(e)}")
     
-    print(f"✅ Procesadas {processed_count} cuotas")
+    logger.info(f"Procesadas {processed_count} cuotas de {len(unique_installments)} identificadas")
     return processed_count
-
 
 @shared_task
 def calculate_overdue_installments():
-    """Calcula campos para cuotas vencidas"""
-    print("🔄 Calculando cuotas vencidas...")
-    
+    """Actualiza cuotas vencidas y calcula mora"""
     today = timezone.now().date()
     
-    # Cuotas vencidas que necesitan actualización
+    # Cuotas vencidas que no están marcadas como overdue
     overdue_installments = Installment.objects.filter(
         due_date__lt=today,
         status__in=['pending', 'partial']
     )
     
-    processed_count = 0
+    updated_count = 0
     for installment in overdue_installments:
         try:
-            # Actualizar estado si es necesario
-            days_overdue = InstallmentCalculator.get_days_overdue(installment)
-            if days_overdue > 0 and installment.status == 'pending':
+            # Actualizar estado
+            if installment.status == 'pending':
                 installment.status = 'overdue'
-                installment.save(update_fields=['status'])
             
-            # Calcular campos
-            InstallmentCalculator.get_late_fee(installment)
-            InstallmentCalculator.get_total_amount_due(installment)
+            # Recalcular mora
+            InstallmentCalculator.clear_cache(installment.id)
+            late_fee = InstallmentCalculator.get_late_fee(installment)
+            days_overdue = InstallmentCalculator.get_days_overdue(installment)
             
-            processed_count += 1
+            installment.late_fee = late_fee
+            installment.days_overdue = days_overdue
+            installment.save(update_fields=['status', 'late_fee', 'days_overdue'])
+            
+            updated_count += 1
             
         except Exception as e:
-            print(f"❌ Error procesando cuota vencida {installment.id}: {e}")
+            logger.error(f"Error actualizando cuota vencida {installment.id}: {str(e)}")
     
-    print(f"✅ Procesadas {processed_count} cuotas vencidas")
-    return processed_count
-
+    logger.info(f"Actualizadas {updated_count} cuotas vencidas")
+    return updated_count
 
 @shared_task
 def update_credit_statuses():
-    """Actualiza el estado de todos los créditos"""
-    print("🔄 Actualizando estados de créditos...")
-    
-    # Créditos con cuotas que necesitan actualización
-    credits_to_update = Credit.objects.filter(
-        installments__status__in=['pending', 'overdue', 'partial']
+    """Actualiza estados de créditos basado en sus cuotas"""
+    credits_with_installments = Credit.objects.filter(
+        installments__isnull=False
     ).distinct()
     
-    processed_count = 0
-    for credit in credits_to_update:
+    updated_count = 0
+    for credit in credits_with_installments:
         try:
             InstallmentCalculator.update_credit_status(credit)
-            processed_count += 1
+            updated_count += 1
             
         except Exception as e:
-            print(f"❌ Error actualizando crédito {credit.id}: {e}")
+            logger.error(f"Error actualizando estado de crédito {credit.uid}: {str(e)}")
     
-    print(f"✅ Actualizados {processed_count} créditos")
-    return processed_count
-
+    logger.info(f"Estados actualizados para {updated_count} créditos")
+    return updated_count
 
 @shared_task
 def calculate_periodic_installments():
-    """Calcula campos según periodicidad del crédito"""
-    print("🔄 Calculando cuotas por periodicidad...")
+    """Calcula campos basado en periodicidad del crédito"""
+    from apps.fintech.models import Periodicity
     
-    today = timezone.now().date()
+    # Obtener periodicidades
+    periodicities = Periodicity.objects.all()
     
-    # Cuotas diarias (periodicidad <= 7 días)
-    daily_installments = Installment.objects.filter(
-        credit__periodicity__days__lte=7,
-        status='pending',
-        due_date__lte=today + timedelta(days=7)
-    )
+    total_processed = 0
+    for periodicity in periodicities:
+        # Calcular cuotas que necesitan actualización según periodicidad
+        if periodicity.days == 1:  # Diario
+            days_back = 1
+        elif periodicity.days == 7:  # Semanal
+            days_back = 7
+        elif periodicity.days == 30:  # Mensual
+            days_back = 30
+        else:
+            days_back = periodicity.days
+        
+        # Cuotas de créditos con esta periodicidad que vencen en el rango
+        installments = Installment.objects.filter(
+            credit__periodicity=periodicity,
+            due_date__gte=timezone.now().date() - timedelta(days=days_back),
+            due_date__lte=timezone.now().date() + timedelta(days=days_back),
+            status__in=['pending', 'partial']
+        )
+        
+        processed_count = 0
+        for installment in installments:
+            try:
+                InstallmentCalculator.clear_cache(installment.id)
+                InstallmentCalculator.get_remaining_amount(installment)
+                InstallmentCalculator.get_days_overdue(installment)
+                InstallmentCalculator.get_late_fee(installment)
+                processed_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error procesando cuota periódica {installment.id}: {str(e)}")
+        
+        total_processed += processed_count
+        logger.info(f"Procesadas {processed_count} cuotas para periodicidad {periodicity.name}")
     
-    # Cuotas semanales (periodicidad 14-15 días)
-    weekly_installments = Installment.objects.filter(
-        credit__periodicity__days__in=[14, 15],
-        status='pending',
-        due_date__lte=today + timedelta(days=14)
-    )
-    
-    # Cuotas mensuales (periodicidad >= 28 días)
-    monthly_installments = Installment.objects.filter(
-        credit__periodicity__days__gte=28,
-        status='pending',
-        due_date__lte=today + timedelta(days=30)
-    )
-    
-    all_installments = (daily_installments | weekly_installments | monthly_installments).distinct()
-    
-    processed_count = 0
-    for installment in all_installments:
-        try:
-            # Limpiar cache y recalcular
-            InstallmentCalculator.clear_cache(installment.id)
-            InstallmentCalculator.get_remaining_amount(installment)
-            InstallmentCalculator.get_days_overdue(installment)
-            InstallmentCalculator.get_late_fee(installment)
-            
-            processed_count += 1
-            
-        except Exception as e:
-            print(f"❌ Error procesando cuota periódica {installment.id}: {e}")
-    
-    print(f"✅ Procesadas {processed_count} cuotas por periodicidad")
-    return processed_count
-
+    logger.info(f"Total procesadas: {total_processed} cuotas por periodicidad")
+    return total_processed
 
 @shared_task
 def clear_old_cache():
-    """Limpia cache antiguo"""
-    print("🧹 Limpiando cache antiguo...")
-    
-    # Esta tarea se ejecuta para limpiar cache que ya no se necesita
-    # Django cache tiene expiración automática, pero podemos forzar limpieza
-    
+    """Limpia el cache completo de Django"""
     from django.core.cache import cache
-    cache.clear()
     
-    print("✅ Cache limpiado")
-    return True
+    try:
+        cache.clear()
+        logger.info("Cache limpiado exitosamente")
+        return True
+    except Exception as e:
+        logger.error(f"Error limpiando cache: {str(e)}")
+        return False

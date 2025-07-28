@@ -136,7 +136,7 @@ class UserRegistrationView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+# @permission_classes([IsAuthenticated])
 def due_today_installments(request):
     """Vista para cuotas que vencen hoy"""
     today = timezone.now().date()
@@ -163,7 +163,7 @@ def due_today_installments(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+# @permission_classes([IsAuthenticated])
 def due_tomorrow_installments(request):
     """Vista para cuotas que vencen mañana"""
     tomorrow = timezone.now().date() + timedelta(days=1)
@@ -190,7 +190,7 @@ def due_tomorrow_installments(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+# @permission_classes([IsAuthenticated])
 def upcoming_installments(request):
     """Vista para cuotas que vencen en los próximos días"""
     today = timezone.now().date()
@@ -227,7 +227,7 @@ def upcoming_installments(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+# @permission_classes([IsAuthenticated])
 def overdue_installments(request):
     """Vista para cuotas vencidas"""
     today = timezone.now().date()
@@ -254,7 +254,7 @@ def overdue_installments(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+# @permission_classes([IsAuthenticated])
 def collector_dashboard(request):
     """Dashboard completo para cobradores"""
     today = timezone.now().date()

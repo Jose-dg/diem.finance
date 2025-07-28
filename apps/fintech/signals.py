@@ -7,6 +7,7 @@ from datetime import datetime
 from django.utils import timezone
 from apps.fintech.models import Installment, Credit
 from apps.fintech.services.installment_calculator import InstallmentCalculator
+from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
 
 
 @receiver(pre_save, sender=AccountMethodAmount)
@@ -84,6 +85,31 @@ def handle_transaction_save(sender, instance, **kwargs):
     except Exception as e:
         # Recomendado para debug, puedes poner logging si lo prefieres
         print(f"[ERROR] No se pudo recalcular el crédito: {e}")
+
+@receiver(post_save, sender=Transaction)
+def check_additional_interest_after_payment(sender, instance, created, **kwargs):
+    """
+    Verifica si se debe aplicar interés adicional después de un pago
+    """
+    if not created or instance.transaction_type != 'income' or instance.status != 'confirmed':
+        return
+    
+    try:
+        # Buscar créditos relacionados con esta transacción
+        credit_adjustments = instance.account_method_amounts.all()
+        
+        for credit_adjustment in credit_adjustments:
+            credit = credit_adjustment.credit
+            
+            # Verificar si se debe aplicar interés adicional
+            if CreditAdjustmentService.should_apply_additional_interest(credit):
+                CreditAdjustmentService.apply_additional_interest(
+                    credit,
+                    reason=f"Pago parcial detectado. Total pagado: {credit.total_abonos}, Total pactado: {credit.price}"
+                )
+                
+    except Exception as e:
+        print(f"[ERROR] No se pudo verificar interés adicional: {e}")
         
 @receiver(post_delete, sender=Transaction)
 def handle_transaction_delete(sender, instance, **kwargs):

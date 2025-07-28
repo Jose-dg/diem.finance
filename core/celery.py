@@ -36,6 +36,11 @@ task_app.conf.beat_schedule = {
         'task': 'apps.fintech.tasks.calculate_periodic_installments',
         'schedule': crontab(hour=10, minute=0),
     },
+    # Verificación de interés adicional a las 12 PM
+    'check-additional-interest-daily': {
+        'task': 'apps.fintech.tasks.check_additional_interest_daily',
+        'schedule': crontab(hour=12, minute=0),
+    },
     # Limpieza de cache semanal
     'clear-old-cache-weekly': {
         'task': 'apps.fintech.tasks.clear_old_cache',
