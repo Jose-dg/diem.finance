@@ -28,6 +28,7 @@ from .models import (
 from django import forms
 from .models import Transaction, Credit
 from django.db.models import Q
+from apps.fintech.services.installment_calculator import InstallmentCalculator
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -254,53 +255,63 @@ class CreditAdjustmentAdmin(admin.ModelAdmin):
 
 @admin.register(Installment)
 class InstallmentAdmin(admin.ModelAdmin):
-    # Campos principales
+    # Campos básicos con cálculos optimizados
     list_display = (
-        'credit_uid', 'number', 'due_date', 'amount', 'status', 
-        'paid', 'remaining_amount'
+        'credit_uid', 'number', 'due_date', 'amount', 'status', 'paid',
+        'remaining_amount_calc', 'days_overdue_calc', 'late_fee_calc'
     )
     
-    # Filtros rápidos
+    # Filtros simples
     list_filter = (
-        'status', 'paid', 'is_scheduled',
-        ('due_date', admin.DateFieldListFilter),
+        'status', 'paid', 'due_date'
     )
     
-    # Búsqueda simple
+    # Búsqueda básica
     search_fields = ('credit__uid', 'number')
-    
-    # Solo lectura
-    readonly_fields = (
-        'created_at', 'updated_at', 'days_overdue', 
-        'remaining_amount', 'amount_paid'
-    )
     
     # Ordenamiento
     ordering = ('-due_date',)
     
-    # Paginación optimizada
-    list_per_page = 20  # Menos registros por página
-    list_max_show_all = 100  # Máximo para "mostrar todo"
+    # Paginación ultra-reducida
+    list_per_page = 10  # Muy pocos registros por página
+    list_max_show_all = 25  # Máximo para "mostrar todo"
     
-    # Optimización de consultas
-    list_select_related = ('credit', 'credit__user')
+    # Solo lectura para campos del sistema
+    readonly_fields = (
+        'created_at', 'updated_at'
+    )
     
     def credit_uid(self, obj):
-        """UID compacto"""
-        return obj.credit.uid[:8] + '...' if obj.credit else 'N/A'
+        """UID compacto del crédito"""
+        if obj.credit and obj.credit.uid:
+            return str(obj.credit.uid)[:8] + '...'
+        return 'N/A'
     credit_uid.short_description = 'Credit UID'
     credit_uid.admin_order_field = 'credit__uid'
     
+    def remaining_amount_calc(self, obj):
+        """Monto restante calculado con cache"""
+        return InstallmentCalculator.get_remaining_amount(obj)
+    remaining_amount_calc.short_description = 'Remaining Amount'
+    
+    def days_overdue_calc(self, obj):
+        """Días de mora calculados con cache"""
+        return InstallmentCalculator.get_days_overdue(obj)
+    days_overdue_calc.short_description = 'Days Overdue'
+    
+    def late_fee_calc(self, obj):
+        """Recargo por mora calculado con cache"""
+        return InstallmentCalculator.get_late_fee(obj)
+    late_fee_calc.short_description = 'Late Fee'
+    
     def get_queryset(self, request):
-        """Consulta optimizada con paginación"""
-        qs = super().get_queryset(request).select_related(
-            'credit', 'credit__user'
-        ).only(
-            'id', 'number', 'due_date', 'amount', 'status', 'paid', 
-            'remaining_amount', 'credit__uid', 'credit__user__username'
+        """Consulta optimizada sin campos calculados"""
+        qs = super().get_queryset(request).select_related('credit').only(
+            'id', 'number', 'due_date', 'amount', 'status', 'paid',
+            'credit__uid', 'credit__user__username'
         )
         
-        # Filtrar por defecto si no hay filtros aplicados
+        # Solo filtrar por defecto si no hay filtros aplicados
         if not request.GET.get('status') and not request.GET.get('paid'):
             qs = qs.filter(status='pending')
         

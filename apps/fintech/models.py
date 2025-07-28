@@ -592,6 +592,9 @@ class Installment(models.Model):
         return self.remaining_amount + self.late_fee
 
     def __str__(self):
-        return f"Cuota #{self.number or '?'} de {self.credit_id} - Vence: {self.due_date or 'sin fecha'} - Estado: {self.status}"
-
-
+        if self.credit and self.credit.user:
+            user_name = f"{self.credit.user.first_name} {self.credit.user.last_name}".strip()
+            if not user_name:
+                user_name = self.credit.user.username
+            return f"Cuota #{self.number} - {user_name} - Crédito: {self.credit.uid}"
+        return f"Cuota #{self.number or '?'} - Crédito: {self.credit.uid if self.credit else 'N/A'}"

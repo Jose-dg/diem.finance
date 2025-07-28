@@ -5,6 +5,9 @@ from apps.fintech.utils.root import distribuir_pago_a_cuotas, generar_cuotas, re
 from .models import CreditAdjustment, Transaction, AccountMethodAmount, Credit
 from datetime import datetime
 from django.utils import timezone
+from apps.fintech.models import Installment, Credit
+from apps.fintech.services.installment_calculator import InstallmentCalculator
+
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
@@ -125,3 +128,63 @@ def distribuir_pago(sender, instance, created, **kwargs):
         fecha_pago = fecha_pago.date()
 
     distribuir_pago_a_cuotas(instance.credit, instance.amount_paid, fecha_pago)
+
+
+@receiver(post_save, sender=Installment)
+def update_installment_calculations(sender, instance, created, **kwargs):
+    """Actualiza cálculos cuando hay cambios en cuotas"""
+    
+    if created:
+        # Nueva cuota: limpiar cache y calcular
+        InstallmentCalculator.clear_cache(instance.id)
+        InstallmentCalculator.get_remaining_amount(instance)
+        InstallmentCalculator.get_days_overdue(instance)
+        
+        # Actualizar estado del crédito
+        if instance.credit:
+            InstallmentCalculator.update_credit_status(instance.credit)
+    
+    elif instance.tracker.has_changed('amount_paid'):
+        # Pago realizado: recalcular remaining_amount
+        InstallmentCalculator.clear_cache(instance.id)
+        InstallmentCalculator.get_remaining_amount(instance)
+        
+        # Actualizar estado del crédito
+        if instance.credit:
+            InstallmentCalculator.update_credit_status(instance.credit)
+    
+    elif instance.tracker.has_changed('status'):
+        # Cambio de estado: recalcular campos de mora
+        InstallmentCalculator.clear_cache(instance.id)
+        InstallmentCalculator.get_days_overdue(instance)
+        InstallmentCalculator.get_late_fee(instance)
+        
+        # Actualizar estado del crédito
+        if instance.credit:
+            InstallmentCalculator.update_credit_status(instance.credit)
+
+
+@receiver(post_save, sender=Credit)
+def update_credit_installments(sender, instance, created, **kwargs):
+    """Actualiza cuotas cuando hay cambios en créditos"""
+    
+    if created:
+        # Nuevo crédito: no hacer nada especial
+        pass
+    
+    elif instance.tracker.has_changed('state'):
+        # Cambio de estado del crédito: actualizar cuotas relacionadas
+        for installment in instance.installments.all():
+            InstallmentCalculator.clear_cache(installment.id)
+            InstallmentCalculator.get_days_overdue(installment)
+            InstallmentCalculator.get_late_fee(installment)
+
+
+@receiver(post_delete, sender=Installment)
+def cleanup_installment_cache(sender, instance, **kwargs):
+    """Limpia cache cuando se elimina una cuota"""
+    InstallmentCalculator.clear_cache(instance.id)
+    
+    # Actualizar estado del crédito
+    if instance.credit:
+        InstallmentCalculator.update_credit_status(instance.credit)

@@ -6,7 +6,12 @@ from .views import (
     AccountViewSet,
     TransactionViewSet,
     CreditViewSet,
-    CustomTokenObtainPairView
+    CustomTokenObtainPairView,
+    due_today_installments,
+    due_tomorrow_installments,
+    upcoming_installments,
+    overdue_installments,
+    collector_dashboard
 )
 
 urlpatterns = [
@@ -28,6 +33,13 @@ urlpatterns = [
     path('credits/<int:pk>/', CreditViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='credit-detail'),
     
     path('recalculate-credit/', RecalculateCreditView.as_view(), name='recalculate_credit'),
+
+    # Rutas para cobradores/asesores
+    path('collector/dashboard/', collector_dashboard, name='collector-dashboard'),
+    path('collector/due-today/', due_today_installments, name='due-today-installments'),
+    path('collector/due-tomorrow/', due_tomorrow_installments, name='due-tomorrow-installments'),
+    path('collector/upcoming/', upcoming_installments, name='upcoming-installments'),
+    path('collector/overdue/', overdue_installments, name='overdue-installments'),
 
 ]
 

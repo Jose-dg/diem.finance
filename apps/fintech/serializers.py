@@ -85,12 +85,49 @@ class CreditAdjustmentSerializer(serializers.ModelSerializer):
         return ret
 
 class InstallmentSerializer(serializers.ModelSerializer):
+    credit_uid = serializers.CharField(source='credit.uid', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    remaining_amount_calc = serializers.SerializerMethodField()
+    days_overdue_calc = serializers.SerializerMethodField()
+    late_fee_calc = serializers.SerializerMethodField()
+    total_amount_due = serializers.SerializerMethodField()
+    
     class Meta:
         model = Installment
         fields = [
             'id', 'number', 'due_date', 'amount', 'paid', 'paid_on',
-            'principal_amount', 'interest_amount', 'late_fee',
+            'principal_amount', 'interest_amount', 'late_fee', 'status',
+            'credit_uid', 'user_name', 'remaining_amount_calc', 
+            'days_overdue_calc', 'late_fee_calc', 'total_amount_due'
         ]
+    
+    def get_user_name(self, obj):
+        """Obtiene el nombre completo del usuario"""
+        if obj.credit and obj.credit.user:
+            user = obj.credit.user
+            full_name = f"{user.first_name} {user.last_name}".strip()
+            return full_name if full_name else user.username
+        return "Usuario no disponible"
+    
+    def get_remaining_amount_calc(self, obj):
+        """Monto restante calculado"""
+        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        return InstallmentCalculator.get_remaining_amount(obj)
+    
+    def get_days_overdue_calc(self, obj):
+        """Días de mora calculados"""
+        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        return InstallmentCalculator.get_days_overdue(obj)
+    
+    def get_late_fee_calc(self, obj):
+        """Recargo por mora calculado"""
+        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        return InstallmentCalculator.get_late_fee(obj)
+    
+    def get_total_amount_due(self, obj):
+        """Total a pagar calculado"""
+        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        return InstallmentCalculator.get_total_amount_due(obj)
 
 class CreditFilterSerializer(serializers.Serializer):
     start_date = serializers.DateField(

@@ -8,6 +8,7 @@ from datetime import timedelta
 from apps.fintech.models import Credit, Installment
 from apps.fintech.utils import recalculate_credit
 from apps.fintech.services.installment_service import InstallmentService
+from apps.fintech.services.installment_calculator import InstallmentCalculator
 
 logger = get_task_logger(__name__)
 
@@ -152,3 +153,178 @@ def installment_daily_maintenance(self):
     except Exception as e:
         logger.error(f"Error en mantenimiento diario: {str(e)}")
         return False
+
+
+@shared_task
+def calculate_installment_fields_batch():
+    """Calcula campos para cuotas que necesitan actualización"""
+    print("🔄 Iniciando cálculo masivo de campos de cuotas...")
+    
+    today = timezone.now().date()
+    
+    # Cuotas que vencen hoy
+    due_today = Installment.objects.filter(
+        due_date=today,
+        status='pending'
+    )
+    
+    # Cuotas con más de 30 días de mora
+    overdue_30 = Installment.objects.filter(
+        due_date__lt=today - timedelta(days=30),
+        status__in=['pending', 'partial']
+    )
+    
+    # Cuotas con pagos parciales recientes
+    recent_partials = Installment.objects.filter(
+        status='partial',
+        updated_at__gte=timezone.now() - timedelta(hours=24)
+    )
+    
+    # Cuotas que necesitan recálculo según periodicidad
+    needs_recalc = Installment.objects.filter(
+        status='pending',
+        updated_at__lt=timezone.now() - timedelta(hours=6)
+    )
+    
+    # Combinar todas las cuotas que necesitan cálculo
+    all_installments = (due_today | overdue_30 | recent_partials | needs_recalc).distinct()
+    
+    processed_count = 0
+    for installment in all_installments:
+        try:
+            # Limpiar cache anterior
+            InstallmentCalculator.clear_cache(installment.id)
+            
+            # Calcular campos (esto actualiza el cache)
+            InstallmentCalculator.get_remaining_amount(installment)
+            InstallmentCalculator.get_days_overdue(installment)
+            InstallmentCalculator.get_late_fee(installment)
+            
+            processed_count += 1
+            
+        except Exception as e:
+            print(f"❌ Error procesando cuota {installment.id}: {e}")
+    
+    print(f"✅ Procesadas {processed_count} cuotas")
+    return processed_count
+
+
+@shared_task
+def calculate_overdue_installments():
+    """Calcula campos para cuotas vencidas"""
+    print("🔄 Calculando cuotas vencidas...")
+    
+    today = timezone.now().date()
+    
+    # Cuotas vencidas que necesitan actualización
+    overdue_installments = Installment.objects.filter(
+        due_date__lt=today,
+        status__in=['pending', 'partial']
+    )
+    
+    processed_count = 0
+    for installment in overdue_installments:
+        try:
+            # Actualizar estado si es necesario
+            days_overdue = InstallmentCalculator.get_days_overdue(installment)
+            if days_overdue > 0 and installment.status == 'pending':
+                installment.status = 'overdue'
+                installment.save(update_fields=['status'])
+            
+            # Calcular campos
+            InstallmentCalculator.get_late_fee(installment)
+            InstallmentCalculator.get_total_amount_due(installment)
+            
+            processed_count += 1
+            
+        except Exception as e:
+            print(f"❌ Error procesando cuota vencida {installment.id}: {e}")
+    
+    print(f"✅ Procesadas {processed_count} cuotas vencidas")
+    return processed_count
+
+
+@shared_task
+def update_credit_statuses():
+    """Actualiza el estado de todos los créditos"""
+    print("🔄 Actualizando estados de créditos...")
+    
+    # Créditos con cuotas que necesitan actualización
+    credits_to_update = Credit.objects.filter(
+        installments__status__in=['pending', 'overdue', 'partial']
+    ).distinct()
+    
+    processed_count = 0
+    for credit in credits_to_update:
+        try:
+            InstallmentCalculator.update_credit_status(credit)
+            processed_count += 1
+            
+        except Exception as e:
+            print(f"❌ Error actualizando crédito {credit.id}: {e}")
+    
+    print(f"✅ Actualizados {processed_count} créditos")
+    return processed_count
+
+
+@shared_task
+def calculate_periodic_installments():
+    """Calcula campos según periodicidad del crédito"""
+    print("🔄 Calculando cuotas por periodicidad...")
+    
+    today = timezone.now().date()
+    
+    # Cuotas diarias (periodicidad <= 7 días)
+    daily_installments = Installment.objects.filter(
+        credit__periodicity__days__lte=7,
+        status='pending',
+        due_date__lte=today + timedelta(days=7)
+    )
+    
+    # Cuotas semanales (periodicidad 14-15 días)
+    weekly_installments = Installment.objects.filter(
+        credit__periodicity__days__in=[14, 15],
+        status='pending',
+        due_date__lte=today + timedelta(days=14)
+    )
+    
+    # Cuotas mensuales (periodicidad >= 28 días)
+    monthly_installments = Installment.objects.filter(
+        credit__periodicity__days__gte=28,
+        status='pending',
+        due_date__lte=today + timedelta(days=30)
+    )
+    
+    all_installments = (daily_installments | weekly_installments | monthly_installments).distinct()
+    
+    processed_count = 0
+    for installment in all_installments:
+        try:
+            # Limpiar cache y recalcular
+            InstallmentCalculator.clear_cache(installment.id)
+            InstallmentCalculator.get_remaining_amount(installment)
+            InstallmentCalculator.get_days_overdue(installment)
+            InstallmentCalculator.get_late_fee(installment)
+            
+            processed_count += 1
+            
+        except Exception as e:
+            print(f"❌ Error procesando cuota periódica {installment.id}: {e}")
+    
+    print(f"✅ Procesadas {processed_count} cuotas por periodicidad")
+    return processed_count
+
+
+@shared_task
+def clear_old_cache():
+    """Limpia cache antiguo"""
+    print("🧹 Limpiando cache antiguo...")
+    
+    # Esta tarea se ejecuta para limpiar cache que ya no se necesita
+    # Django cache tiene expiración automática, pero podemos forzar limpieza
+    
+    from django.core.cache import cache
+    cache.clear()
+    
+    print("✅ Cache limpiado")
+    return True
