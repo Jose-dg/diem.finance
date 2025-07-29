@@ -323,7 +323,11 @@ class CreditsAPIView(APIView):
         qs = (
             qs
             .select_related('user','seller','currency','subcategory','periodicity')
-            .prefetch_related('installments','adjustments','payments__payment_method')
+            .prefetch_related(
+                'installments',
+                'adjustments__type',
+                'payments__payment_method'
+            )
             .order_by('-created_at')
         )
 

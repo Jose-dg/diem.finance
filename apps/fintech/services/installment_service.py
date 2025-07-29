@@ -5,6 +5,7 @@ from django.db import transaction
 from datetime import timedelta, date, datetime
 
 from apps.fintech.models import Installment, Credit
+from apps.fintech.utils.root import should_exclude_sundays
 
 
 class InstallmentService:
@@ -16,6 +17,9 @@ class InstallmentService:
         Genera cuotas automáticamente para un crédito - OPTIMIZADO
         """
         try:
+            # Marcar que estamos generando cuotas para evitar signals
+            credit._generating_installments = True
+            
             # Eliminar cuotas existentes si las hay
             credit.installments.all().delete()
             
@@ -49,15 +53,31 @@ class InstallmentService:
                 )
                 installments.append(installment)
                 
-                # Calcular siguiente fecha
-                current_date = current_date + timedelta(days=periodicity_days)
+                # Calcular siguiente fecha solo si no es la última cuota
+                if i < installment_number:
+                    if should_exclude_sundays(credit):
+                        # Para créditos diarios (< 30 días), saltar domingos
+                        next_date = current_date + timedelta(days=periodicity_days)
+                        while next_date.weekday() == 6:  # 6 = domingo
+                            next_date += timedelta(days=1)
+                        current_date = next_date
+                    else:
+                        # Para créditos con periodicidad >= 30 días, incluir domingos
+                        current_date = current_date + timedelta(days=periodicity_days)
             
             # Crear todas las cuotas de una vez
             Installment.objects.bulk_create(installments)
             
+            # Remover la marca
+            if hasattr(credit, '_generating_installments'):
+                delattr(credit, '_generating_installments')
+            
             return True, f"Se generaron {len(installments)} cuotas exitosamente"
             
         except Exception as e:
+            # Remover la marca en caso de error
+            if hasattr(credit, '_generating_installments'):
+                delattr(credit, '_generating_installments')
             return False, f"Error generando cuotas: {str(e)}"
     
     @staticmethod

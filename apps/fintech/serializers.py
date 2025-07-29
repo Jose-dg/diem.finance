@@ -74,9 +74,41 @@ class TransactionSerializer(serializers.ModelSerializer):
         return AccountMethodAmountSerializer(payments, many=True).data
 
 class CreditAdjustmentSerializer(serializers.ModelSerializer):
+    adjustment_type = serializers.SerializerMethodField()
+    adjustment_name = serializers.SerializerMethodField()
+    is_positive = serializers.SerializerMethodField()
+    sign = serializers.SerializerMethodField()
+    
     class Meta:
         model = CreditAdjustment
-        fields = ['type', 'amount', 'added_on', 'reason', 'created_at']
+        fields = [
+            'id', 'type', 'adjustment_type', 'adjustment_name', 'amount', 
+            'added_on', 'reason', 'created_at', 'is_positive', 'sign'
+        ]
+
+    def get_adjustment_type(self, obj):
+        """Obtiene el código del tipo de ajuste"""
+        if obj.type:
+            return obj.type.code
+        return None
+    
+    def get_adjustment_name(self, obj):
+        """Obtiene el nombre del tipo de ajuste"""
+        if obj.type:
+            return obj.type.name
+        return "Tipo no especificado"
+    
+    def get_is_positive(self, obj):
+        """Indica si el ajuste es positivo (descuento) o negativo (cargo)"""
+        if obj.type:
+            return obj.type.is_positive
+        return True
+    
+    def get_sign(self, obj):
+        """Retorna el signo del ajuste (+ para descuentos, - para cargos)"""
+        if obj.type:
+            return '+' if obj.type.is_positive else '-'
+        return '+'
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
@@ -165,8 +197,14 @@ class CreditSerializer(serializers.ModelSerializer):
     currency   = CurrencySerializer()
 
     periodicity_days = serializers.IntegerField(source='periodicity.days', read_only=True)
-    # adjustments = CreditAdjustmentSerializer(many=True, read_only=True)
+    adjustments = CreditAdjustmentSerializer(many=True, read_only=True)
     installments = InstallmentSerializer(many=True, read_only=True)
+    
+    # Campos calculados para ajustes
+    total_adjustments = serializers.SerializerMethodField()
+    total_discounts = serializers.SerializerMethodField()
+    total_charges = serializers.SerializerMethodField()
+    adjustments_summary = serializers.SerializerMethodField()
 
     class Meta:
         model  = Credit
@@ -188,6 +226,49 @@ class CreditSerializer(serializers.ModelSerializer):
             }
             for p in qs
         ]
+    
+    def get_total_adjustments(self, obj):
+        """Calcula el total de ajustes (descuentos - cargos)"""
+        total = 0
+        for adjustment in obj.adjustments.all():
+            if adjustment.type and adjustment.type.is_positive:
+                total += float(adjustment.amount)
+            else:
+                total -= float(adjustment.amount)
+        return total
+    
+    def get_total_discounts(self, obj):
+        """Calcula el total de descuentos aplicados"""
+        total = 0
+        for adjustment in obj.adjustments.all():
+            if adjustment.type and adjustment.type.is_positive:
+                total += float(adjustment.amount)
+        return total
+    
+    def get_total_charges(self, obj):
+        """Calcula el total de cargos aplicados"""
+        total = 0
+        for adjustment in obj.adjustments.all():
+            if adjustment.type and not adjustment.type.is_positive:
+                total += float(adjustment.amount)
+        return total
+    
+    def get_adjustments_summary(self, obj):
+        """Resumen de ajustes por tipo"""
+        summary = {}
+        for adjustment in obj.adjustments.all():
+            if adjustment.type:
+                type_name = adjustment.type.name
+                if type_name not in summary:
+                    summary[type_name] = {
+                        'type_code': adjustment.type.code,
+                        'total_amount': 0,
+                        'count': 0,
+                        'is_positive': adjustment.type.is_positive
+                    }
+                summary[type_name]['total_amount'] += float(adjustment.amount)
+                summary[type_name]['count'] += 1
+        return summary
  
 class CreditSimpleSerializer(serializers.ModelSerializer):
     user = UserSerializer()

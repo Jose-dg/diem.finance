@@ -1,10 +1,8 @@
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum
-from django.db import transaction
 from decimal import Decimal
 from django.db import transaction
-from apps.fintech.models import Installment, Transaction
 from decimal import Decimal, ROUND_HALF_UP
 from django.utils.timezone import now
 import math
@@ -138,92 +136,107 @@ def recalculate_credit(credit: Credit):
     5) Ajusta credit.morosidad_level, credit.is_in_default, credit.state.
     6) Guarda el crédito.
     """
+    
+    # Protección contra recursión infinita
+    if hasattr(credit, '_recalculating') and credit._recalculating:
+        return credit
+    
+    credit._recalculating = True
+    
+    try:
+        today = timezone.now().date()
 
-    today = timezone.now().date()
+        # 1) Sumar abonos de transacciones confirmadas para este crédito
+        total_abonos = Transaction.objects.filter(
+            account_method_amounts__credit=credit,
+            transaction_type='income',
+            status='confirmed'
+        ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
 
-    # 1) Sumar abonos de transacciones confirmadas para este crédito
-    total_abonos = Transaction.objects.filter(
-        account_method_amounts__credit=credit,
-        transaction_type='income',
-        status='confirmed'
-    ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
+        # 2) Sumar ajustes de intereses adicionales (si usas un modelo Adjustment)
+        total_adjustments = credit.adjustments.aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
 
-    # 2) Sumar ajustes de intereses adicionales (si usas un modelo Adjustment)
-    total_adjustments = credit.adjustments.aggregate(
-        total=Sum('amount')
-    )['total'] or Decimal('0.00')
+        # 3) Recalcular earnings e interés
+        cost = Decimal(credit.cost)
+        price = Decimal(credit.price)
+        credit_days = Decimal(credit.credit_days)
+        periodicity_days = Decimal(credit.periodicity.days) if credit.periodicity and credit.periodicity.days else Decimal(1)
 
-    # 3) Recalcular earnings e interés
-    cost = Decimal(credit.cost)
-    price = Decimal(credit.price)
-    credit_days = Decimal(credit.credit_days)
-    periodicity_days = Decimal(credit.periodicity.days) if credit.periodicity and credit.periodicity.days else Decimal(1)
+        credit.earnings = price - cost
+        if cost and price and credit_days:
+            # Fórmula de interés que ya tenías
+            credit.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
 
-    credit.earnings = price - cost
-    if cost and price and credit_days:
-        # Fórmula de interés que ya tenías
-        credit.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
+        # 4) Recalcular número y valor de cuotas
+        if periodicity_days and credit_days:
+            installment_number = math.ceil(credit_days / periodicity_days)
+            credit.installment_number = installment_number
+            if installment_number > 0:
+                credit.installment_value = (price / Decimal(installment_number)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+            else:
+                credit.installment_value = price
 
-    # 4) Recalcular número y valor de cuotas
-    if periodicity_days and credit_days:
-        installment_number = math.ceil(credit_days / periodicity_days)
-        credit.installment_number = installment_number
-        if installment_number > 0:
-            credit.installment_value = (price / Decimal(installment_number)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+        # 5) Recalcular pending_amount
+        pending = (price + total_adjustments) - total_abonos
+        credit.total_abonos = total_abonos
+        credit.pending_amount = pending
+
+        # 6) Generar la lista de fechas esperadas de pago
+        first_date = credit.first_date_payment
+        second_date = credit.second_date_payment
+        # Pasamos periodicity_days como entero a la función y el crédito para excluir domingos
+        payment_dates = generate_payment_dates(first_date, second_date, int(periodicity_days), today, credit)
+
+        # 7) Obtener todas las fechas en las que ya hubo un pago confirmado
+        payments_made = Transaction.objects.filter(
+            account_method_amounts__credit=credit,
+            transaction_type='income',
+            status='confirmed'
+        ).values_list('date', flat=True).distinct()
+
+        # 8) De todas las fechas esperadas, las que ya pasaron (<= hoy) pero no están en payments_made,
+        #    son "fechas vencidas sin pago": morosidad
+        missed_dates = [
+            d for d in payment_dates
+            if d <= today and d not in payments_made
+        ]
+
+        # 9) Determinar nivel de morosidad
+        if not missed_dates:
+            credit.morosidad_level = 'on_time'
+            credit.is_in_default = False
+            credit.state = 'completed' if pending <= Decimal('0.01') else 'pending'
         else:
-            credit.installment_value = price
+            missed_count = len(missed_dates)
+            if missed_count == 1:
+                morosidad = 'mild_default'
+            elif missed_count == 2:
+                morosidad = 'moderate_default'
+            elif missed_count == 3:
+                morosidad = 'severe_default'
+            elif missed_count == 4:
+                morosidad = 'recurrent_default'
+            else:
+                morosidad = 'critical_default'
 
-    # 5) Recalcular pending_amount
-    pending = (price + total_adjustments) - total_abonos
-    credit.total_abonos = total_abonos
-    credit.pending_amount = pending
+            credit.morosidad_level = morosidad
+            credit.is_in_default = True
+            credit.state = 'pending' if pending > Decimal('0.00') else 'completed'
 
-    # 6) Generar la lista de fechas esperadas de pago
-    first_date = credit.first_date_payment
-    second_date = credit.second_date_payment
-    # Pasamos periodicity_days como entero a la función
-    payment_dates = generate_payment_dates(first_date, second_date, int(periodicity_days), today)
+        credit.updated_at = timezone.now()
+        
+        # Usar update_fields para evitar disparar signals innecesarios
+        credit.save(update_fields=[
+            'earnings', 'interest', 'installment_number', 'installment_value',
+            'total_abonos', 'pending_amount', 'morosidad_level', 'is_in_default',
+            'state', 'updated_at'
+        ])
 
-    # 7) Obtener todas las fechas en las que ya hubo un pago confirmado
-    payments_made = Transaction.objects.filter(
-        account_method_amounts__credit=credit,
-        transaction_type='income',
-        status='confirmed'
-    ).values_list('date', flat=True).distinct()
-
-    # 8) De todas las fechas esperadas, las que ya pasaron (<= hoy) pero no están en payments_made,
-    #    son "fechas vencidas sin pago": morosidad
-    missed_dates = [
-        d for d in payment_dates
-        if d <= today and d not in payments_made
-    ]
-
-    # 9) Determinar nivel de morosidad
-    if not missed_dates:
-        credit.morosidad_level = 'on_time'
-        credit.is_in_default = False
-        credit.state = 'completed' if pending <= Decimal('0.01') else 'pending'
-    else:
-        missed_count = len(missed_dates)
-        if missed_count == 1:
-            morosidad = 'mild_default'
-        elif missed_count == 2:
-            morosidad = 'moderate_default'
-        elif missed_count == 3:
-            morosidad = 'severe_default'
-        elif missed_count == 4:
-            morosidad = 'recurrent_default'
-        else:
-            morosidad = 'critical_default'
-
-        credit.morosidad_level = morosidad
-        credit.is_in_default = True
-        credit.state = 'pending' if pending > Decimal('0.00') else 'completed'
-
-    credit.updated_at = timezone.now()
-    credit.save()
-
-    return credit
+        return credit
+    finally:
+        credit._recalculating = False
 
 
 def next_quincena(from_date: date) -> date:
@@ -261,11 +274,12 @@ def next_quincena(from_date: date) -> date:
     return candidato
 
 
-def generate_payment_dates(first_date, second_date, periodicity_days, today=None):
+def generate_payment_dates(first_date, second_date, periodicity_days, today=None, credit=None):
     """
     Genera la secuencia de fechas de pago esperadas según:
     - Si el crédito ya trae first_date_payment y second_date_payment, inferimos periodicidad.
     - Caso contrario, periódicamente cada N días, o "quincenal" con la regla < 5 días, o "mensual exacto".
+    - Para créditos con periodicidad ≤ 30 días, excluye domingos.
     Devuelve todas las fechas <= hoy.
     """
     if today is None:
@@ -280,6 +294,7 @@ def generate_payment_dates(first_date, second_date, periodicity_days, today=None
         infer_days = periodicity_days or 1
 
     current_date = first_date
+    exclude_sundays = credit and should_exclude_sundays(credit)
 
     # 2) Iterar hasta 'today'
     while current_date and current_date <= today:
@@ -287,7 +302,12 @@ def generate_payment_dates(first_date, second_date, periodicity_days, today=None
 
         if infer_days == 1:
             # Diario
-            current_date = current_date + timedelta(days=1)
+            next_date = current_date + timedelta(days=1)
+            if exclude_sundays:
+                # Saltar domingos para créditos diarios
+                while next_date.weekday() == 6:  # 6 = domingo
+                    next_date += timedelta(days=1)
+            current_date = next_date
 
         elif infer_days == 15:
             # Quincenal con regla
@@ -308,6 +328,21 @@ def generate_payment_dates(first_date, second_date, periodicity_days, today=None
 
         else:
             # Cada N días
-            current_date = current_date + timedelta(days=infer_days)
+            next_date = current_date + timedelta(days=infer_days)
+            if exclude_sundays and infer_days < 30:
+                # Saltar domingos para créditos con periodicidad < 30 días
+                while next_date.weekday() == 6:  # 6 = domingo
+                    next_date += timedelta(days=1)
+            current_date = next_date
 
     return dates
+
+def should_exclude_sundays(credit):
+    """
+    Determina si se deben excluir los domingos basado en la periodicidad.
+    Solo créditos con periodicidad diaria (< 30 días) excluyen domingos.
+    """
+    if not credit.periodicity:
+        return False
+    
+    return credit.periodicity.days < 30

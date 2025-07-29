@@ -73,7 +73,7 @@ class CreditAdjustmentService:
                     reason=reason or f"Interés adicional por incumplimiento. Price: {credit.price}, Cost: {credit.cost}"
                 )
                 
-                # Actualizar pending_amount del crédito
+                # Actualizar pending_amount del crédito usando update_fields para evitar signals
                 current_pending = credit.pending_amount or Decimal('0.00')
                 credit.pending_amount = current_pending + additional_interest
                 credit.save(update_fields=['pending_amount'])

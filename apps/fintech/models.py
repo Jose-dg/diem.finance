@@ -9,6 +9,7 @@ from django.conf import settings
 
 import uuid
 import math
+from datetime import timedelta
 
 from apps.fintech.managers import CreditManager, UserProfileManager, TransactionManager, InstallmentManager
 
@@ -415,36 +416,94 @@ class Credit(models.Model):
         Recalcula el saldo pendiente del crédito basado en el total de abonos.
         """
         self.pending_amount = self.price - self.total_abonos
-        self.save()
+        # Usar update_fields para evitar disparar signals innecesarios
+        self.save(update_fields=['pending_amount'])
+    
+    def _calculate_effective_days(self, total_days):
+        """
+        Calcula los días efectivos para intereses, excluyendo domingos si aplica.
+        """
+        from apps.fintech.utils.root import should_exclude_sundays
+        
+        if not should_exclude_sundays(self):
+            return total_days
+        
+        # Para créditos con periodicidad < 30 días, excluir domingos
+        effective_days = 0
+        current_date = self.first_date_payment
+        end_date = self.second_date_payment
+        
+        while current_date <= end_date:
+            if current_date.weekday() != 6:  # No es domingo
+                effective_days += 1
+            current_date += timedelta(days=1)
+        
+        return effective_days
 
     def save(self, *args, **kwargs):
         """
         Custom save method to initialize pending_amount and calculate interest, earnings,
         installment_number, and installment_value.
         """
-        with db_transaction.atomic():
-            is_new = self.pk is None
-            cost = Decimal(self.cost)
-            price = Decimal(self.price)
-            credit_days = Decimal(self.credit_days)
-            periodicity_days = Decimal(self.periodicity.days) if self.periodicity else Decimal(1)
+        # Protección contra recursión infinita
+        if hasattr(self, '_saving') and self._saving:
+            return super(Credit, self).save(*args, **kwargs)
+        
+        self._saving = True
+        
+        try:
+            with db_transaction.atomic():
+                is_new = self.pk is None
+                cost = Decimal(self.cost)
+                price = Decimal(self.price)
+                credit_days = Decimal(self.credit_days)
+                periodicity_days = Decimal(self.periodicity.days) if self.periodicity else Decimal(1)
 
-            if is_new:
-                self.pending_amount = self.price
+                if is_new:
+                    self.pending_amount = self.price
 
-            self.earnings = price - cost
+                self.earnings = price - cost
 
-            if cost and price and credit_days:
-                self.interest = (Decimal(1) / (credit_days / Decimal(30))) * ((price - cost) / cost)
+                if cost and price and credit_days:
+                    # Calcular días efectivos para intereses (excluyendo domingos si aplica)
+                    effective_days = self._calculate_effective_days(credit_days)
+                    self.interest = (Decimal(1) / (effective_days / Decimal(30))) * ((price - cost) / cost)
 
-            if self.periodicity and self.credit_days:
-                self.installment_number = math.ceil(self.credit_days / periodicity_days)
-                if self.installment_number > 0:
-                    self.installment_value = (price / Decimal(self.installment_number)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
-                else:
-                    self.installment_value = price
+                if self.periodicity and self.credit_days:
+                    # Solo calcular installment_number si no está configurado
+                    if not self.installment_number:
+                        self.installment_number = math.ceil(self.credit_days / periodicity_days)
+                    if self.installment_number > 0:
+                        self.installment_value = (Decimal(str(self.price)) / Decimal(self.installment_number)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+                    else:
+                        self.installment_value = self.price
 
-            super(Credit, self).save(*args, **kwargs)
+                super(Credit, self).save(*args, **kwargs)
+        finally:
+            self._saving = False
+    
+    @property
+    def tracker(self):
+        """Propiedad temporal para evitar errores de tracker"""
+        class DummyTracker:
+            def __init__(self):
+                self._changed_fields = set()
+            
+            def has_changed(self, field_name):
+                """Simula el comportamiento de has_changed"""
+                return False
+            
+            def changed_fields(self):
+                """Retorna campos que han cambiado"""
+                return self._changed_fields
+            
+            def set_changed(self, field_name):
+                """Marca un campo como cambiado"""
+                self._changed_fields.add(field_name)
+        
+        if not hasattr(self, '_dummy_tracker'):
+            self._dummy_tracker = DummyTracker()
+        return self._dummy_tracker
 
 class Transaction(models.Model):
     

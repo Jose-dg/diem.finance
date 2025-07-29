@@ -9,6 +9,8 @@ from apps.fintech.models import Installment, Credit
 from apps.fintech.services.installment_calculator import InstallmentCalculator
 from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
 
+# Variable global para evitar recursión infinita
+_recalculating_credits = set()
 
 @receiver(pre_save, sender=AccountMethodAmount)
 def adjust_credit_on_update(sender, instance, **kwargs):
@@ -16,17 +18,21 @@ def adjust_credit_on_update(sender, instance, **kwargs):
     Ajusta el total de abonos cuando se actualiza un AccountMethodAmount.
     """
     if instance.pk:
-        previous = AccountMethodAmount.objects.get(pk=instance.pk)
-        if previous.amount_paid != instance.amount_paid:
-            difference = instance.amount_paid - previous.amount_paid
-            instance.credit.update_total_abonos(difference)
+        try:
+            previous = AccountMethodAmount.objects.get(pk=instance.pk)
+            if previous.amount_paid != instance.amount_paid:
+                difference = instance.amount_paid - previous.amount_paid
+                if instance.credit:
+                    instance.credit.update_total_abonos(difference)
+        except AccountMethodAmount.DoesNotExist:
+            pass
 
 @receiver(post_save, sender=AccountMethodAmount)
 def update_credit_on_account_method_change(sender, instance, **kwargs):
     """
     Solo actualizamos el crédito si la transacción es de tipo 'income'
     """
-    if instance.transaction.transaction_type == 'income':
+    if instance.transaction.transaction_type == 'income' and instance.credit:
         instance.credit.update_total_abonos(instance.amount_paid)
 
 @receiver(post_delete, sender=AccountMethodAmount)
@@ -79,8 +85,12 @@ def handle_transaction_save(sender, instance, **kwargs):
         # Buscar el primer AccountMethodAmount relacionado a esta transacción
         ama = AccountMethodAmount.objects.filter(transaction=instance).select_related('credit').first()
 
-        if ama and ama.credit:
-            recalculate_credit(ama.credit.uid)
+        if ama and ama.credit and ama.credit.uid not in _recalculating_credits:
+            _recalculating_credits.add(ama.credit.uid)
+            try:
+                recalculate_credit(ama.credit.uid)
+            finally:
+                _recalculating_credits.discard(ama.credit.uid)
 
     except Exception as e:
         # Recomendado para debug, puedes poner logging si lo prefieres
@@ -116,28 +126,44 @@ def handle_transaction_delete(sender, instance, **kwargs):
     """
     Recalcula el crédito completo si se elimina una transacción que afecta el saldo.
     """
-    if instance.credit:
-        recalculate_credit(instance.credit.uid)
+    if instance.credit and instance.credit.uid not in _recalculating_credits:
+        _recalculating_credits.add(instance.credit.uid)
+        try:
+            recalculate_credit(instance.credit.uid)
+        finally:
+            _recalculating_credits.discard(instance.credit.uid)
     
 @receiver(post_save, sender=CreditAdjustment)
 def handle_credit_adjustment_save(sender, instance, created, **kwargs):
     """
     Cuando se crea o actualiza un CreditAdjustment, recalculamos el crédito asociado.
     """
-    if instance.credit:
-        recalculate_credit(instance.credit)
+    if instance.credit and instance.credit.uid not in _recalculating_credits:
+        _recalculating_credits.add(instance.credit.uid)
+        try:
+            recalculate_credit(instance.credit)
+        finally:
+            _recalculating_credits.discard(instance.credit.uid)
 
 @receiver(post_delete, sender=CreditAdjustment)
 def handle_credit_adjustment_delete(sender, instance, **kwargs):
     """
     Cuando se elimina un CreditAdjustment, recalculamos el crédito asociado.
     """
-    if instance.credit:
-        recalculate_credit(instance.credit)
+    if instance.credit and instance.credit.uid not in _recalculating_credits:
+        _recalculating_credits.add(instance.credit.uid)
+        try:
+            recalculate_credit(instance.credit)
+        finally:
+            _recalculating_credits.discard(instance.credit.uid)
 
 @receiver(post_save, sender=Credit)
 def crear_cuotas_credito(sender, instance, created, **kwargs):
+    # Solo generar cuotas si es un crédito nuevo y no tiene cuotas
     if created and not instance.installments.exists():
+        # Verificar si ya se están generando cuotas manualmente
+        if hasattr(instance, '_generating_installments'):
+            return
         generar_cuotas(instance)
 
 @receiver(post_save, sender=AccountMethodAmount)
@@ -170,24 +196,8 @@ def update_installment_calculations(sender, instance, created, **kwargs):
         if instance.credit:
             InstallmentCalculator.update_credit_status(instance.credit)
     
-    elif instance.tracker.has_changed('amount_paid'):
-        # Pago realizado: recalcular remaining_amount
-        InstallmentCalculator.clear_cache(instance.id)
-        InstallmentCalculator.get_remaining_amount(instance)
-        
-        # Actualizar estado del crédito
-        if instance.credit:
-            InstallmentCalculator.update_credit_status(instance.credit)
-    
-    elif instance.tracker.has_changed('status'):
-        # Cambio de estado: recalcular campos de mora
-        InstallmentCalculator.clear_cache(instance.id)
-        InstallmentCalculator.get_days_overdue(instance)
-        InstallmentCalculator.get_late_fee(instance)
-        
-        # Actualizar estado del crédito
-        if instance.credit:
-            InstallmentCalculator.update_credit_status(instance.credit)
+    # Nota: Removemos las verificaciones de tracker.has_changed() ya que no está disponible
+    # Los cálculos se harán cuando sea necesario
 
 
 @receiver(post_save, sender=Credit)
@@ -198,12 +208,8 @@ def update_credit_installments(sender, instance, created, **kwargs):
         # Nuevo crédito: no hacer nada especial
         pass
     
-    elif instance.tracker.has_changed('state'):
-        # Cambio de estado del crédito: actualizar cuotas relacionadas
-        for installment in instance.installments.all():
-            InstallmentCalculator.clear_cache(installment.id)
-            InstallmentCalculator.get_days_overdue(installment)
-            InstallmentCalculator.get_late_fee(installment)
+    # Nota: Removemos las verificaciones de tracker.has_changed() ya que no está disponible
+    # Los cálculos se harán cuando sea necesario
 
 
 @receiver(post_delete, sender=Installment)
