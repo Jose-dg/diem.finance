@@ -329,3 +329,120 @@ class InstallmentService:
             return True, analytics
         except Exception as e:
             return False, f"Error obteniendo analytics: {str(e)}" 
+
+    @staticmethod
+    def update_installment_calculations(installment):
+        """
+        Actualiza los cálculos de una cuota específica
+        """
+        try:
+            # Recalcular días de mora
+            if installment.due_date and installment.due_date < timezone.now().date():
+                installment.days_overdue = (timezone.now().date() - installment.due_date).days
+            else:
+                installment.days_overdue = 0
+            
+            # Recalcular monto restante
+            installment.remaining_amount = installment.amount - installment.amount_paid
+            
+            # Recalcular recargo por mora si aplica
+            if installment.days_overdue > 0:
+                # Calcular 5% de recargo por cada 30 días de mora
+                late_fee_rate = Decimal('0.05')  # 5%
+                months_overdue = installment.days_overdue / 30
+                installment.late_fee = installment.remaining_amount * late_fee_rate * Decimal(str(months_overdue))
+            else:
+                installment.late_fee = Decimal('0.00')
+            
+            # Actualizar estado si es necesario
+            if installment.remaining_amount == 0:
+                installment.status = 'paid'
+                installment.paid = True
+                installment.paid_on = timezone.now().date()
+            elif installment.amount_paid > 0:
+                installment.status = 'partial'
+            elif installment.days_overdue > 0:
+                installment.status = 'overdue'
+            else:
+                installment.status = 'pending'
+            
+            installment.save(update_fields=[
+                'days_overdue', 'remaining_amount', 'late_fee', 
+                'status', 'paid', 'paid_on'
+            ])
+            
+            return True, "Cálculos actualizados exitosamente"
+            
+        except Exception as e:
+            return False, f"Error actualizando cálculos: {str(e)}"
+    
+    @staticmethod
+    def mark_installment_overdue(installment):
+        """
+        Marca una cuota como vencida y calcula la mora
+        """
+        try:
+            if installment.due_date and installment.due_date < timezone.now().date():
+                installment.status = 'overdue'
+                installment.days_overdue = (timezone.now().date() - installment.due_date).days
+                
+                # Calcular recargo por mora
+                if installment.days_overdue > 0:
+                    late_fee_rate = Decimal('0.05')  # 5%
+                    months_overdue = installment.days_overdue / 30
+                    installment.late_fee = installment.remaining_amount * late_fee_rate * Decimal(str(months_overdue))
+                
+                installment.save(update_fields=['status', 'days_overdue', 'late_fee'])
+                return True, "Cuota marcada como vencida"
+            else:
+                return False, "La cuota no está vencida"
+                
+        except Exception as e:
+            return False, f"Error marcando cuota como vencida: {str(e)}" 
+
+    @staticmethod
+    def update_credit_installments_on_payment(credit, payment_amount):
+        """
+        Actualiza las cuotas de un crédito cuando se realiza un pago
+        """
+        try:
+            remaining_payment = payment_amount
+            
+            # Obtener cuotas pendientes ordenadas por fecha de vencimiento
+            pending_installments = credit.installments.filter(
+                status__in=['pending', 'partial']
+            ).order_by('due_date')
+            
+            for installment in pending_installments:
+                if remaining_payment <= 0:
+                    break
+                
+                # Calcular el monto restante real de la cuota
+                actual_remaining = installment.amount - installment.amount_paid
+                
+                # Calcular cuánto se puede aplicar a esta cuota
+                amount_to_apply = min(remaining_payment, actual_remaining)
+                
+                if amount_to_apply > 0:
+                    # Actualizar la cuota
+                    installment.amount_paid += amount_to_apply
+                    installment.remaining_amount = installment.amount - installment.amount_paid
+                    
+                    # Actualizar estado de la cuota
+                    if installment.remaining_amount == 0:
+                        installment.status = 'paid'
+                        installment.paid = True
+                        installment.paid_on = timezone.now().date()
+                    else:
+                        installment.status = 'partial'
+                    
+                    installment.save(update_fields=[
+                        'amount_paid', 'remaining_amount', 'status', 'paid', 'paid_on'
+                    ])
+                    
+                    remaining_payment -= amount_to_apply
+            
+            return True, f"Cuotas actualizadas con pago de {payment_amount}"
+            
+        except Exception as e:
+            return False, f"Error actualizando cuotas: {str(e)}" 

@@ -34,6 +34,13 @@ def update_credit_on_account_method_change(sender, instance, **kwargs):
     """
     if instance.transaction.transaction_type == 'income' and instance.credit:
         instance.credit.update_total_abonos(instance.amount_paid)
+        
+        # Actualizar estado de las cuotas del crédito
+        try:
+            from apps.fintech.services.installment_service import InstallmentService
+            InstallmentService.update_credit_installments_on_payment(instance.credit, instance.amount_paid)
+        except Exception as e:
+            print(f"Error actualizando cuotas después del pago: {str(e)}")
 
 @receiver(post_delete, sender=AccountMethodAmount)
 def adjust_credit_on_delete(sender, instance, **kwargs):

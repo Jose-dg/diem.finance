@@ -408,8 +408,17 @@ class Credit(models.Model):
         """
         Actualiza el total de abonos realizados al crédito y recalcula el saldo pendiente.
         """
-        self.total_abonos += Decimal(amount_paid_difference)
+        # Convertir a Decimal si es necesario
+        if not isinstance(amount_paid_difference, Decimal):
+            amount_paid_difference = Decimal(str(amount_paid_difference))
+        
+        # Asegurar que total_abonos sea Decimal
+        if not isinstance(self.total_abonos, Decimal):
+            self.total_abonos = Decimal(str(self.total_abonos))
+        
+        self.total_abonos += amount_paid_difference
         self.update_pending_amount()
+        self.save(update_fields=['total_abonos', 'pending_amount'])
 
     def update_pending_amount(self):
         """

@@ -41,6 +41,11 @@ task_app.conf.beat_schedule = {
         'task': 'apps.fintech.tasks.check_additional_interest_daily',
         'schedule': crontab(hour=12, minute=0),
     },
+    # Reconciliación de pagos a las 4 PM
+    'reconcile-payments-daily': {
+        'task': 'apps.fintech.tasks.reconcile_payments',
+        'schedule': crontab(hour=16, minute=0),
+    },
     # Limpieza de cache semanal
     'clear-old-cache-weekly': {
         'task': 'apps.fintech.tasks.clear_old_cache',
