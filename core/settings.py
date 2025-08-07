@@ -222,6 +222,19 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# Configuración de duración de resultados en Redis
+CELERY_TASK_RESULT_EXPIRES = 86400  # 24 horas en segundos
+CELERY_TASK_SOFT_TIME_LIMIT = 3600  # 1 hora límite suave
+CELERY_TASK_TIME_LIMIT = 7200       # 2 horas límite duro
+
+# Configuración de retención de resultados
+CELERY_TASK_IGNORE_RESULT = False   # Guardar resultados
+CELERY_TASK_STORE_EAGER_RESULT = True  # Guardar resultados inmediatamente
+
+# Configuración de monitoreo
+CELERY_WORKER_SEND_TASK_EVENTS = True
+CELERY_TASK_SEND_SENT_EVENT = True
+
 CELERY_BEAT_SCHEDULE = {
     'recalc-credits-nightly': {
         'task': 'apps.fintech.tasks.batch_recalculate_credits',

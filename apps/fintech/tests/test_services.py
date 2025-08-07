@@ -91,7 +91,7 @@ class CreditServiceTestCase(TestCase):
         # Verificar actualización del crédito
         self.credit.refresh_from_db()
         self.assertEqual(self.credit.total_abonos, amount)
-    
+
     def test_create_transaction_invalid_amount(self):
         """Test de creación de transacción con monto inválido"""
         success, message, status = CreditService.create_transaction_from_payment(
