@@ -13,21 +13,21 @@ class CreditQueryService:
         """
         Obtiene créditos según el rol del usuario:
         - Super admin: Ve TODO
-        - Admin: Ve TODO (pero no es superuser)
-        - Vendedor: Ve solo créditos que vendió
+        - Admin (sin seller_profile): Ve TODO
+        - Vendedor (con seller_profile): Ve solo créditos que vendió
         - Cliente: Ve solo sus créditos
         """
         if user.is_superuser:
             # Super admin: Ve TODO
             return Credit.objects.all()
         
-        elif user.is_staff:
-            # Admin: Ve TODO (pero no es superuser)
-            return Credit.objects.all()
-        
         elif hasattr(user, 'seller_profile'):
-            # Vendedor: Ve solo créditos que vendió
+            # Vendedor: Ve solo créditos que vendió (prioridad sobre is_staff)
             return Credit.objects.filter(seller__user=user)
+        
+        elif user.is_staff:
+            # Admin (sin seller_profile): Ve TODO
+            return Credit.objects.all()
         
         else:
             # Cliente: Ve solo sus créditos
