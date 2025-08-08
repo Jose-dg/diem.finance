@@ -171,7 +171,7 @@ class Seller(models.Model):
     returns = models.IntegerField(default=0)
 
     def __str__(self):
-        return f"Seller: {self.user}"
+        return f"{self.user}"
        
 class User(AbstractUser):
     id_user = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)

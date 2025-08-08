@@ -3,6 +3,8 @@ from apps.fintech.filter import CreditFilter
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now, make_aware
@@ -17,6 +19,13 @@ import pytz
 from apps.fintech.models import Credit, Transaction, Expense, AccountMethodAmount
 from apps.fintech.serializers import StandardResultsSetPagination
 from apps.fintech.serializers import CreditSerializer, CreditFilterSerializer
+
+# Import del servicio con manejo de errores
+try:
+    from apps.fintech.services.credit_query_service import CreditQueryService
+except ImportError:
+    print("⚠️ Error importando CreditQueryService, usando lógica directa")
+    CreditQueryService = None
 
 from apps.fintech.services.kpi_service import KPIService
 from datetime import datetime
@@ -277,119 +286,300 @@ class MonthlyChartDataAPIView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+from django.shortcuts import render
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django_filters import rest_framework as filters
+from rest_framework import generics
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q
+from datetime import datetime, timedelta
+import json
+
+from apps.fintech.models import Credit, Transaction, AccountMethodAmount
+from apps.fintech.serializers import CreditSerializer
+from apps.fintech.filter import CreditFilter
+from apps.fintech.services.kpi_service import KPIService
+from apps.fintech.services.credit_query_service import CreditQueryService
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+@method_decorator(csrf_exempt, name='dispatch')
 class CreditsAPIView(APIView):
-    """
-    Lista créditos creados entre start_date y end_date (inclusive),
-    con paginación, filtros opcionales y fechas retornadas en UTC-05:00.
-    Soporta GET (query params) y POST (body json) para máxima flexibilidad.
-    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
     
-    def get(self, request, *args, **kwargs):
-        return self._filter_and_respond(request, request.query_params)
-
-    def post(self, request, *args, **kwargs):
-        return self._filter_and_respond(request, request.data)
-
-    def _filter_and_respond(self, request, params):
-        # Validar que end_date no sea menor que start_date
-        sd = params.get('start_date')
-        ed = params.get('end_date')
-        if sd and ed and parse_date(ed) < parse_date(sd):
-            return Response(
-                {"detail": "end_date no puede ser anterior a start_date."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # 1) validar y parsear parámetros
-        filter_ser = CreditFilterSerializer(data=params)
-        filter_ser.is_valid(raise_exception=True)
-        data = filter_ser.validated_data
-
-        # 2) combinar fechas con hora mínima y máxima en zona local (America/Bogota)
-        tz = timezone.get_default_timezone()
-        start_local = datetime.combine(data['start_date'], time.min)
-        end_local   = datetime.combine(data['end_date'],   time.max)
-        start_aware = timezone.make_aware(start_local, tz)
-        end_aware   = timezone.make_aware(end_local,   tz)
-
-        # 3) construir el queryset base (rango de fechas)
-        qs = Credit.objects.filter(created_at__range=(start_aware, end_aware))
-
-        # 4) filtros opcionales
-        if data.get('status'):
-            qs = qs.filter(state=data['status'])
-
-        # 5) eager loading para performance
-        qs = (
-            qs
-            .select_related('user','seller','currency','subcategory','periodicity')
-            .prefetch_related(
-                'installments',
-                'adjustments__type',
-                'payments__payment_method'
-            )
-            .order_by('-created_at')
-        )
-
-        # 6) paginación manual
-        paginator = StandardResultsSetPagination()
-        page = paginator.paginate_queryset(qs, request, view=self)
-        serializer = CreditSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
- 
-class CreditFilterAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        print("✅ Petición recibida en CreditFilterAPIView")
-
-        try:
-            # Muestra el body recibido
-            print("🟡 Datos recibidos:", request.data)
-
-            qs = Credit.objects.select_related(
-                "user__phone_1",
-                "user__label",
-                "periodicity"
-            ).all()
-
-            print(f"🟢 Créditos totales antes de filtrar: {qs.count()}")
-
-            # Instancia el filtro
-            filterset = CreditFilter(request.data, queryset=qs)
-
-            if not filterset.is_valid():
-                print("❌ Errores de validación en filtros:", filterset.errors)
-                return Response(filterset.errors, status=status.HTTP_400_BAD_REQUEST)
-
-            filtered_qs = filterset.qs
-            print(f"🔵 Créditos después de aplicar filtros: {filtered_qs.count()}")
-
-            # Paginación dinámica con StandardResultsSetPagination
-            paginator = StandardResultsSetPagination()
-            page = paginator.paginate_queryset(filtered_qs, request)
-
-            serializer = CreditSerializer(page, many=True, context={"request": request})
-            print("✅ Serialización paginada completa. Retornando datos...")
-
-            return paginator.get_paginated_response(serializer.data)
-
-        except Exception as e:
-            print("❗ Error inesperado:", str(e))
-            return Response({"error": str(e)}, status=500)
-
-class CreditKPIView(APIView):
-    """
-    API para consultar KPIs de créditos entre dos fechas.
-    Recibe start_date y end_date como parámetros GET (YYYY-MM-DD).
-    """
     def get(self, request):
-        start_date = request.GET.get('start_date')
-        end_date = request.GET.get('end_date')
-        if not start_date or not end_date:
-            return Response({'error': 'Debe enviar start_date y end_date en formato YYYY-MM-DD'}, status=status.HTTP_400_BAD_REQUEST)
+        """Endpoint para obtener créditos con filtros opcionales"""
         try:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-        except ValueError:
-            return Response({'error': 'Formato de fecha inválido. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
-        data = KPIService.get_credit_kpi_summary(start_date, end_date)
-        return Response(data, status=status.HTTP_200_OK)
+            # Parámetros de consulta
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            status_filter = request.GET.get('status')
+            user_filter = request.GET.get('user')
+            
+            print(f"🔍 CreditsAPIView - Usuario: {request.user.username}")
+            print(f"🔍 Parámetros: start_date={start_date}, end_date={end_date}, status={status_filter}, user={user_filter}")
+            
+            # Validar fechas
+            if start_date and end_date:
+                try:
+                    start_aware = datetime.strptime(start_date, '%Y-%m-%d')
+                    end_aware = datetime.strptime(end_date, '%Y-%m-%d')
+                except ValueError:
+                    return Response(
+                        {'error': 'Formato de fecha inválido. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:
+                # Fechas por defecto (últimos 30 días)
+                end_aware = datetime.now()
+                start_aware = end_aware - timedelta(days=30)
+            
+            # Usar CreditQueryService para obtener créditos según rol
+            base_qs = CreditQueryService.get_user_credits_by_date_range(
+                request.user, 
+                start_aware.date(), 
+                end_aware.date()
+            )
+            
+            # Log del tipo de usuario para debugging
+            user_type = "super_admin" if request.user.is_superuser else \
+                       "admin" if request.user.is_staff else \
+                       "seller" if hasattr(request.user, 'seller_profile') else "client"
+            print(f"🔍 Usuario {request.user.username} ({user_type}) - Créditos encontrados: {base_qs.count()}")
+            
+            # Filtros opcionales
+            if status_filter:
+                base_qs = base_qs.filter(status=status_filter)
+                print(f"🔍 Filtro por status: {status_filter}")
+            
+            if user_filter:
+                base_qs = base_qs.filter(user__username__icontains=user_filter)
+                print(f"🔍 Filtro por usuario: {user_filter}")
+            
+            # Eager loading para optimizar consultas
+            base_qs = base_qs.select_related(
+                'user', 'seller', 'currency', 'periodicity', 'subcategory', 'payment'
+            ).prefetch_related('payments', 'adjustments', 'installments')
+            
+            # Paginación
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(base_qs, request)
+            
+            if page is not None:
+                serializer = CreditSerializer(page, many=True)
+                return paginator.get_paginated_response(serializer.data)
+            
+            serializer = CreditSerializer(base_qs, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            print(f"❌ Error en CreditsAPIView: {str(e)}")
+            return Response(
+                {'error': f'Error interno del servidor: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def post(self, request):
+        """Endpoint para filtrar créditos con parámetros en el body"""
+        try:
+            data = request.data
+            print(f"🔍 CreditsAPIView POST - Usuario: {request.user.username}")
+            print(f"🔍 Datos recibidos: {data}")
+            
+            # Validar datos requeridos
+            start_date = data.get('start_date')
+            end_date = data.get('end_date')
+            
+            if not start_date or not end_date:
+                return Response(
+                    {'error': 'start_date y end_date son requeridos'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            return self._filter_and_respond(request, data)
+            
+        except Exception as e:
+            print(f"❌ Error en CreditsAPIView POST: {str(e)}")
+            return Response(
+                {'error': f'Error interno del servidor: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _filter_and_respond(self, request, params):
+        """Método auxiliar para filtrar y responder"""
+        try:
+            # 1) Validar fechas
+            start_date = params.get('start_date')
+            end_date = params.get('end_date')
+            
+            try:
+                start_aware = datetime.strptime(start_date, '%Y-%m-%d')
+                end_aware = datetime.strptime(end_date, '%Y-%m-%d')
+            except ValueError:
+                return Response(
+                    {'error': 'Formato de fecha inválido. Use YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 2) Usar CreditQueryService para obtener créditos según rol
+            base_qs = CreditQueryService.get_user_credits_by_date_range(
+                request.user, 
+                start_aware.date(), 
+                end_aware.date()
+            )
+            
+            # Log del tipo de usuario para debugging
+            user_type = "super_admin" if request.user.is_superuser else \
+                       "admin" if request.user.is_staff else \
+                       "seller" if hasattr(request.user, 'seller_profile') else "client"
+            print(f"🔍 Usuario {request.user.username} ({user_type}) - Créditos encontrados: {base_qs.count()}")
+            
+            # 3) Filtros opcionales
+            status_filter = params.get('status')
+            if status_filter:
+                base_qs = base_qs.filter(status=status_filter)
+                print(f"🔍 Filtro por status: {status_filter}")
+            
+            user_filter = params.get('user')
+            if user_filter:
+                base_qs = base_qs.filter(user__username__icontains=user_filter)
+                print(f"🔍 Filtro por usuario: {user_filter}")
+            
+            # 4) Eager loading para optimizar consultas
+            base_qs = base_qs.select_related(
+                'user', 'seller', 'currency', 'periodicity', 'subcategory', 'payment'
+            ).prefetch_related('payments', 'adjustments', 'installments')
+            
+            # 5) Paginación
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(base_qs, request)
+            
+            if page is not None:
+                serializer = CreditSerializer(page, many=True)
+                return paginator.get_paginated_response(serializer.data)
+            
+            serializer = CreditSerializer(base_qs, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            print(f"❌ Error en _filter_and_respond: {str(e)}")
+            return Response(
+                {'error': f'Error interno del servidor: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CreditFilterAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    
+    def post(self, request, *args, **kwargs):
+        """Endpoint para filtrar créditos usando django-filter"""
+        try:
+            data = request.data
+            print(f"🔍 CreditFilterAPIView - Usuario: {request.user.username}")
+            print(f"🔍 Datos recibidos: {data}")
+            
+            # Crear filterset con los datos recibidos
+            filterset = CreditFilter(data=data)
+            
+            if not filterset.is_valid():
+                return Response(
+                    {'error': 'Parámetros de filtro inválidos', 'details': filterset.errors},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Usar CreditQueryService para obtener créditos según rol
+            base_qs = CreditQueryService.get_user_credits(request.user)
+            
+            # Log del tipo de usuario para debugging
+            user_type = "super_admin" if request.user.is_superuser else \
+                       "admin" if request.user.is_staff else \
+                       "seller" if hasattr(request.user, 'seller_profile') else "client"
+            print(f"🔍 Usuario {request.user.username} ({user_type}) - Créditos encontrados: {base_qs.count()}")
+            
+            # Aplicar filtros del filterset
+            qs = filterset.qs
+            
+            # Eager loading para optimizar consultas
+            qs = qs.select_related(
+                'user', 'seller', 'currency', 'periodicity', 'subcategory', 'payment'
+            ).prefetch_related('payments', 'adjustments', 'installments')
+            
+            # Paginación
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(qs, request)
+            
+            if page is not None:
+                serializer = CreditSerializer(page, many=True)
+                return paginator.get_paginated_response(serializer.data)
+            
+            serializer = CreditSerializer(qs, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            print(f"❌ Error en CreditFilterAPIView: {str(e)}")
+            return Response(
+                {'error': f'Error interno del servidor: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CreditKPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Endpoint para obtener KPIs de créditos"""
+        try:
+            # Parámetros de consulta
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            
+            print(f"🔍 CreditKPIView - Usuario: {request.user.username}")
+            print(f"🔍 Parámetros: start_date={start_date}, end_date={end_date}")
+            
+            # Validar fechas
+            if not start_date or not end_date:
+                return Response(
+                    {'error': 'start_date y end_date son requeridos'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {'error': 'Formato de fecha inválido. Use YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Obtener KPIs usando el servicio
+            kpi_data = KPIService.get_credit_kpi_summary(
+                start_date=start_date,
+                end_date=end_date,
+                user=request.user  # Pasar usuario para filtrado por rol
+            )
+            
+            return Response(kpi_data)
+            
+        except Exception as e:
+            print(f"❌ Error en CreditKPIView: {str(e)}")
+            return Response(
+                {'error': f'Error interno del servidor: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

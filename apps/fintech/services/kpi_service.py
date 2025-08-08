@@ -7,12 +7,25 @@ class KPIService:
     """Service class for KPI calculations and business metrics"""
     
     @staticmethod
-    def get_credit_kpi_summary(start_date, end_date):
+    def get_credit_kpi_summary(start_date, end_date, user=None):
         """
         Calcula los KPIs principales entre dos fechas y el comparativo con el periodo anterior.
+        Si se proporciona user, filtra solo los créditos apropiados según el tipo de usuario.
         """
         # Créditos en rango
         credits = Credit.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+        
+        # Filtrar por usuario si se proporciona
+        if user:
+            if user.is_staff or user.is_superuser:
+                # Es admin del sistema - ver créditos que administra/vendió
+                credits = credits.filter(seller__user=user)
+                print(f"📊 KPIs para admin {user.username} - créditos administrados")
+            else:
+                # Es cliente - ver sus propios créditos
+                credits = credits.filter(user=user)
+                print(f"📊 KPIs para cliente {user.username} - créditos propios")
+        
         total_credit_amount = credits.aggregate(total=Sum('price'))['total'] or 0
         credit_count = credits.count()
         avg_credit_amount = credits.aggregate(avg=Avg('price'))['avg'] or 0
@@ -41,6 +54,16 @@ class KPIService:
         prev_start = start_date - delta
         prev_end = start_date - timedelta(days=1)
         prev_credits = Credit.objects.filter(created_at__date__gte=prev_start, created_at__date__lte=prev_end)
+        
+        # Filtrar por usuario si se proporciona
+        if user:
+            if user.is_staff or user.is_superuser:
+                # Es admin del sistema - ver créditos que administra/vendió
+                prev_credits = prev_credits.filter(seller__user=user)
+            else:
+                # Es cliente - ver sus propios créditos
+                prev_credits = prev_credits.filter(user=user)
+        
         prev_total_credit_amount = prev_credits.aggregate(total=Sum('price'))['total'] or 0
         prev_abonos = prev_credits.aggregate(total=Sum('total_abonos'))['total'] or 0
         prev_expected_recaudo = Installment.objects.filter(
