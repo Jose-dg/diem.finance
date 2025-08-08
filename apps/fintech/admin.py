@@ -1,5 +1,4 @@
 from django.contrib import admin
-from import_export.admin import ImportExportModelAdmin
 
 from .models import (
     AccountMethodAmount, 
@@ -56,7 +55,7 @@ class AddressInline(admin.TabularInline):
     extra = 1  # Número de direcciones extra para añadir por defecto
 
 @admin.register(Address)
-class AddressAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class AddressAdmin(admin.ModelAdmin):
     list_display = ('user', 'address_type', 'address', 'city', 'country')
     search_fields = ('user__username', 'address', 'city', 'country__name')
 
@@ -74,7 +73,7 @@ class DocumentAdmin(admin.ModelAdmin):
     search_fields = ('code', 'description')
 
 @admin.register(CategoryType)
-class CategoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class CategoryAdmin(admin.ModelAdmin):
     list_display = ('uid', 'name', 'description')
     search_fields = ('name', )
 
@@ -94,7 +93,7 @@ class AccountAdmin(admin.ModelAdmin):
     search_fields = ('name', 'account_number', 'currency')
 
 @admin.register(Label)
-class LabelAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class LabelAdmin(admin.ModelAdmin):
     list_display = ('name', 'position')
     search_fields = ('name', 'position')
   
@@ -109,7 +108,7 @@ class PhoneNumberAdmin(admin.ModelAdmin):
     search_fields = ('country_code',) 
 
 @admin.register(Country)
-class CountryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class CountryAdmin(admin.ModelAdmin):
     list_display = ('name', 'utc_offset')
     search_fields = ('name',)
 
@@ -208,7 +207,7 @@ class TransactionAdmin(admin.ModelAdmin):
         js = ('admin/js/filter_credits.js',)
 
 @admin.register(Credit)
-class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class CreditAdmin(admin.ModelAdmin):
     list_display = (
         'uid', 'state', 'created_at', 'description', 'morosidad_level', 'user', 'cost', 'price', 
         'credit_days', 'earnings', 'interest', 'periodicity', 'total_abonos','pending_amount', 
@@ -224,7 +223,7 @@ class CreditAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 @admin.register(ParamsLocation)
-class ParamsLocationAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class ParamsLocationAdmin(admin.ModelAdmin):
     list_display = ('city_name', 'state_name', 'country_name', 'city_code', 'state_code', 'country_code')
     search_fields = ('city_name', 'state_name', 'country_name', 'city_code', 'state_code', 'country_code')
 

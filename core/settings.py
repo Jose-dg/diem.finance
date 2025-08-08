@@ -46,7 +46,6 @@ THIRD_PARTY_APPS = [
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-    'import_export',
     'django_filters',
 ]
 
@@ -190,9 +189,15 @@ LANGUAGE_CODE = 'en-us'
 # TIME_ZONE = 'UTC'
 TIME_ZONE = 'America/Bogota'
 
-USE_I18N = True
+USE_I18N = False  
 
-USE_TZ = True
+USE_TZ = False
+
+LANGUAGES = [
+    ('en', 'English'),
+]
+
+LOCALE_PATHS = []
 
 
 # Static files (CSS, JavaScript, Images)
@@ -286,7 +291,6 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
-# JWT Settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),

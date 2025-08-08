@@ -404,6 +404,9 @@ class Credit(models.Model):
     def __str__(self):
         return f"{self.uid} - {self.user} - {self.subcategory}: Credit:{self.price}, pending:{self.pending_amount}"
 
+    class Meta:
+        ordering = ['-created_at']
+
     def update_total_abonos(self, amount_paid_difference):
         """
         Actualiza el total de abonos realizados al crédito y recalcula el saldo pendiente.

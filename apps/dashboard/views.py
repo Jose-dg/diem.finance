@@ -351,7 +351,7 @@ class CreditsAPIView(APIView):
                 request.user, 
                 start_aware.date(), 
                 end_aware.date()
-            )
+            ).order_by('-created_at')  # Agregar ordenamiento
             
             # Log del tipo de usuario para debugging
             user_type = "super_admin" if request.user.is_superuser else \
@@ -438,7 +438,7 @@ class CreditsAPIView(APIView):
                 request.user, 
                 start_aware.date(), 
                 end_aware.date()
-            )
+            ).order_by('-created_at')  # Agregar ordenamiento
             
             # Log del tipo de usuario para debugging
             user_type = "super_admin" if request.user.is_superuser else \
@@ -503,7 +503,7 @@ class CreditFilterAPIView(APIView):
                 )
             
             # Usar CreditQueryService para obtener créditos según rol
-            base_qs = CreditQueryService.get_user_credits(request.user)
+            base_qs = CreditQueryService.get_user_credits(request.user).order_by('-created_at')  # Agregar ordenamiento
             
             # Log del tipo de usuario para debugging
             user_type = "super_admin" if request.user.is_superuser else \
