@@ -322,14 +322,15 @@ class CreditsAPIView(APIView):
     def get(self, request):
         """Endpoint para obtener créditos con filtros opcionales"""
         try:
-            # Parámetros de consulta
-            start_date = request.GET.get('start_date')
-            end_date = request.GET.get('end_date')
-            status_filter = request.GET.get('status')
-            user_filter = request.GET.get('user')
+            # Parámetros de consulta - primero de URL, luego de body
+            start_date = request.GET.get('start_date') or request.data.get('start_date')
+            end_date = request.GET.get('end_date') or request.data.get('end_date')
+            status_filter = request.GET.get('status') or request.data.get('status')
+            user_filter = request.GET.get('user') or request.data.get('user')
             
             print(f"🔍 CreditsAPIView - Usuario: {request.user.username}")
             print(f"🔍 Parámetros: start_date={start_date}, end_date={end_date}, status={status_filter}, user={user_filter}")
+            print(f"🔍 Body data: {request.data}")
             
             # Validar fechas
             if start_date and end_date:
@@ -341,17 +342,15 @@ class CreditsAPIView(APIView):
                         {'error': 'Formato de fecha inválido. Use YYYY-MM-DD'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
+                # Usar CreditQueryService con filtro de fecha
+                base_qs = CreditQueryService.get_user_credits_by_date_range(
+                    request.user, 
+                    start_aware.date(), 
+                    end_aware.date()
+                ).order_by('-created_at')
             else:
-                # Fechas por defecto (últimos 30 días)
-                end_aware = datetime.now()
-                start_aware = end_aware - timedelta(days=30)
-            
-            # Usar CreditQueryService para obtener créditos según rol
-            base_qs = CreditQueryService.get_user_credits_by_date_range(
-                request.user, 
-                start_aware.date(), 
-                end_aware.date()
-            ).order_by('-created_at')  # Agregar ordenamiento
+                # Sin filtro de fecha - obtener todos los créditos del usuario
+                base_qs = CreditQueryService.get_user_credits(request.user).order_by('-created_at')
             
             # Log del tipo de usuario para debugging
             user_type = "super_admin" if request.user.is_superuser else \
@@ -392,23 +391,74 @@ class CreditsAPIView(APIView):
             )
     
     def post(self, request):
-        """Endpoint para filtrar créditos con parámetros en el body"""
+        """Endpoint para filtrar créditos con parámetros en el body (compatible con frontend)"""
         try:
             data = request.data
             print(f"🔍 CreditsAPIView POST - Usuario: {request.user.username}")
             print(f"🔍 Datos recibidos: {data}")
             
-            # Validar datos requeridos
+            # Extraer parámetros del body
             start_date = data.get('start_date')
             end_date = data.get('end_date')
+            status_filter = data.get('status')
+            user_filter = data.get('user')
             
+            print(f"🔍 Parámetros extraídos: start_date={start_date}, end_date={end_date}, status={status_filter}, user={user_filter}")
+            
+            # Validar fechas requeridas
             if not start_date or not end_date:
                 return Response(
                     {'error': 'start_date y end_date son requeridos'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            return self._filter_and_respond(request, data)
+            # Validar formato de fechas
+            try:
+                start_aware = datetime.strptime(start_date, '%Y-%m-%d')
+                end_aware = datetime.strptime(end_date, '%Y-%m-%d')
+            except ValueError:
+                return Response(
+                    {'error': 'Formato de fecha inválido. Use YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Usar CreditQueryService con filtro de fecha
+            base_qs = CreditQueryService.get_user_credits_by_date_range(
+                request.user, 
+                start_aware.date(), 
+                end_aware.date()
+            ).order_by('-created_at')
+            
+            # Log del tipo de usuario para debugging
+            user_type = "super_admin" if request.user.is_superuser else \
+                       "admin" if request.user.is_staff else \
+                       "seller" if hasattr(request.user, 'seller_profile') else "client"
+            print(f"🔍 Usuario {request.user.username} ({user_type}) - Créditos encontrados: {base_qs.count()}")
+            
+            # Filtros opcionales
+            if status_filter:
+                base_qs = base_qs.filter(status=status_filter)
+                print(f"🔍 Filtro por status: {status_filter}")
+            
+            if user_filter:
+                base_qs = base_qs.filter(user__username__icontains=user_filter)
+                print(f"🔍 Filtro por usuario: {user_filter}")
+            
+            # Eager loading para optimizar consultas
+            base_qs = base_qs.select_related(
+                'user', 'seller', 'currency', 'periodicity', 'subcategory', 'payment'
+            ).prefetch_related('payments', 'adjustments', 'installments')
+            
+            # Paginación
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(base_qs, request)
+            
+            if page is not None:
+                serializer = CreditSerializer(page, many=True)
+                return paginator.get_paginated_response(serializer.data)
+            
+            serializer = CreditSerializer(base_qs, many=True)
+            return Response(serializer.data)
             
         except Exception as e:
             print(f"❌ Error en CreditsAPIView POST: {str(e)}")
