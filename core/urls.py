@@ -26,6 +26,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('fintech/', include('apps.fintech.urls')),
     path('dashboard/', include('apps.dashboard.urls')),
+    path('insights/', include('apps.insights.urls')),
 
     path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),  
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh')

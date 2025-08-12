@@ -1,0 +1,29 @@
+from django.urls import path
+from . import views
+
+app_name = 'insights'
+
+urlpatterns = [
+    # Dashboards principales (independientes de modelos insights)
+    path('dashboard/executive/', views.ExecutiveDashboardView.as_view(), name='executive_dashboard'),
+    path('dashboard/credits/', views.CreditAnalyticsView.as_view(), name='credit_analytics'),
+    path('dashboard/risk/', views.RiskDashboardView.as_view(), name='risk_dashboard'),
+    path('dashboard/users/', views.UserInsightsView.as_view(), name='user_insights'),
+    path('dashboard/operational/', views.OperationalDashboardView.as_view(), name='operational_dashboard'),
+    path('dashboard/revenue/', views.RevenueDashboardView.as_view(), name='revenue_dashboard'),
+    
+    # Analytics específicos (independientes de modelos insights)
+    path('portfolio/overview/', views.PortfolioOverviewView.as_view(), name='portfolio_overview'),
+    path('predictive/insights/', views.PredictiveInsightsView.as_view(), name='predictive_insights'),
+    
+    # Análisis de créditos con parámetros de fechas
+    path('credits/analysis/', views.CreditAnalysisView.as_view(), name='credit_analysis'),
+    path('credits/analysis/summary/', views.CreditAnalysisSummaryView.as_view(), name='credit_analysis_summary'),
+    path('credits/analysis/clients/', views.CreditAnalysisClientsView.as_view(), name='credit_analysis_clients'),
+    
+    # Resumen y utilidades (independientes de modelos insights)
+    path('summary/', views.InsightsSummaryView.as_view(), name='insights_summary'),
+    path('health-check/', views.insights_health_check, name='health_check'),
+    path('export/', views.insights_export, name='export_data'),
+]
+

@@ -4,7 +4,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.fintech.models import Credit, Installment, User, Currency, Periodicity, Account
-from apps.fintech.services.installment_service import InstallmentService
+from apps.fintech.services.credit import InstallmentService
 
 
 class InstallmentServiceTestCase(TestCase):

@@ -6,7 +6,7 @@ from django.db.models.signals import post_save
 
 from apps.fintech.models import Credit, Periodicity, User, Currency, SubCategory, Category, Account
 from apps.fintech.utils.root import should_exclude_sundays
-from apps.fintech.services.installment_service import InstallmentService
+from apps.fintech.services.credit import InstallmentService
 
 
 class SundayExclusionTestCase(TestCase):

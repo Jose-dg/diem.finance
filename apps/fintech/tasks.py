@@ -9,9 +9,7 @@ from decimal import Decimal
 
 from apps.fintech.models import Credit, Installment, Transaction, AccountMethodAmount
 from apps.fintech.utils.root import recalculate_credit
-from apps.fintech.services.installment_service import InstallmentService
-from apps.fintech.services.credit_service import CreditService
-from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
+from apps.fintech.services.credit import InstallmentService, CreditService, CreditAdjustmentService
 
 logger = get_task_logger(__name__)
 

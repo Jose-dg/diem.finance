@@ -8,9 +8,8 @@ from apps.fintech.models import (
     Credit, Installment, Transaction, AccountMethodAmount,
     User, Currency, Periodicity, SubCategory, Account
 )
-from apps.fintech.services.credit_service import CreditService
-from apps.fintech.services.installment_service import InstallmentService
-from apps.fintech.services.transaction_service import TransactionService
+from apps.fintech.services.credit import CreditService, InstallmentService
+from apps.fintech.services.transaction import TransactionService
 from apps.fintech.utils.root import recalculate_credit
 
 User = get_user_model()

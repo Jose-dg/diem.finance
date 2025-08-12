@@ -1,13 +1,51 @@
-from .credit_service import CreditService
-from .client_service import ClientService
-from .kpi_service import KPIService
-from .installment_service import InstallmentService
-from .credit_query_service import CreditQueryService
+# Credit Services
+from .credit import (
+    CreditService,
+    CreditBalanceService,
+    CreditAdjustmentService,
+    CreditQueryService,
+    InstallmentService
+)
+
+# Transaction Services
+from .transaction import (
+    TransactionService,
+    TransactionManager
+)
+
+# Payment Services
+from .payment import PaymentService
+
+# Client Services
+from .client import ClientService
+
+# Analytics Services
+from .analytics import KPIService
+
+# Utility Services
+from .utils import InstallmentCalculator
 
 __all__ = [
+    # Credit
     'CreditService',
-    'ClientService', 
-    'KPIService',
+    'CreditBalanceService',
+    'CreditAdjustmentService',
+    'CreditQueryService',
     'InstallmentService',
-    'CreditQueryService'
+    
+    # Transaction
+    'TransactionService',
+    'TransactionManager',
+    
+    # Payment
+    'PaymentService',
+    
+    # Client
+    'ClientService',
+    
+    # Analytics
+    'KPIService',
+    
+    # Utils
+    'InstallmentCalculator'
 ] 

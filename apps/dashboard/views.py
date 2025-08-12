@@ -22,12 +22,12 @@ from apps.fintech.serializers import CreditSerializer, CreditFilterSerializer
 
 # Import del servicio con manejo de errores
 try:
-    from apps.fintech.services.credit_query_service import CreditQueryService
+    from apps.fintech.services.credit import CreditQueryService
 except ImportError:
     print("⚠️ Error importando CreditQueryService, usando lógica directa")
     CreditQueryService = None
 
-from apps.fintech.services.kpi_service import KPIService
+from apps.fintech.services.analytics import KPIService
 from datetime import datetime
 
 class FinanceView(APIView):
@@ -305,8 +305,8 @@ import json
 from apps.fintech.models import Credit, Transaction, AccountMethodAmount
 from apps.fintech.serializers import CreditSerializer
 from apps.fintech.filter import CreditFilter
-from apps.fintech.services.kpi_service import KPIService
-from apps.fintech.services.credit_query_service import CreditQueryService
+from apps.fintech.services.analytics import KPIService
+from apps.fintech.services.credit import CreditQueryService
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20

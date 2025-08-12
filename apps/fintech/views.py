@@ -16,13 +16,13 @@ from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
 from apps.fintech.models import Installment
-from apps.fintech.services.installment_calculator import InstallmentCalculator
+from apps.fintech.services.utils import InstallmentCalculator
 from apps.fintech.serializers import InstallmentSerializer
 
 from apps.fintech.utils.root import recalculate_credit
-from apps.fintech.services.credit_service import CreditService
-from apps.fintech.services.kpi_service import KPIService
-from apps.fintech.services.client_service import ClientService
+from apps.fintech.services.credit import CreditService
+from apps.fintech.services.analytics import KPIService
+from apps.fintech.services.client import ClientService
 
 from .models import (
     User, Account, Transaction, Credit, AccountMethodAmount, SubCategory,

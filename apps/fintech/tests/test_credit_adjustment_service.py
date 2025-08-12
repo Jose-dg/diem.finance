@@ -5,7 +5,7 @@ from apps.fintech.models import (
     User, Credit, Currency, Periodicity, Account, 
     Adjustment, CreditAdjustment, SubCategory, Category, CategoryType
 )
-from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
+from apps.fintech.services.credit import CreditAdjustmentService
 
 
 class CreditAdjustmentServiceTest(TestCase):

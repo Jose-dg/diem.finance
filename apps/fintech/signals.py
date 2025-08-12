@@ -6,8 +6,8 @@ from .models import CreditAdjustment, Transaction, AccountMethodAmount, Credit
 from datetime import datetime
 from django.utils import timezone
 from apps.fintech.models import Installment, Credit
-from apps.fintech.services.installment_calculator import InstallmentCalculator
-from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
+from apps.fintech.services.utils import InstallmentCalculator
+from apps.fintech.services.credit import CreditAdjustmentService
 
 # Variable global para evitar recursión infinita
 _recalculating_credits = set()
@@ -37,7 +37,7 @@ def update_credit_on_account_method_change(sender, instance, **kwargs):
         
         # Actualizar estado de las cuotas del crédito
         try:
-            from apps.fintech.services.installment_service import InstallmentService
+            from apps.fintech.services.credit import InstallmentService
             InstallmentService.update_credit_installments_on_payment(instance.credit, instance.amount_paid)
         except Exception as e:
             print(f"Error actualizando cuotas después del pago: {str(e)}")

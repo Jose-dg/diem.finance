@@ -4,7 +4,7 @@ from django.utils import timezone
 from apps.fintech.models import Credit
 from apps.fintech.services.payment.payment_service import PaymentService
 from apps.fintech.services.transaction.transaction_manager import TransactionManager
-from apps.fintech.services.audit.audit_logger import AuditLogger
+from apps.fintech.services.utils.audit.audit_logger import AuditLogger
 
 class Command(BaseCommand):
     help = 'Prueba el nuevo sistema de servicios de pagos'

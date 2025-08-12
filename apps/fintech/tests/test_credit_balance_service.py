@@ -6,7 +6,7 @@ from apps.fintech.models import (
     Credit, Transaction, AccountMethodAmount, CreditAdjustment,
     SubCategory, Currency, Periodicity, Account
 )
-from apps.fintech.services.credit_balance_service import CreditBalanceService
+from apps.fintech.services.credit import CreditBalanceService
 from apps.fintech.utils.root import recalculate_credit
 
 User = get_user_model()

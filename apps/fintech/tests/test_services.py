@@ -8,8 +8,7 @@ from apps.fintech.models import (
     Credit, Installment, Transaction, AccountMethodAmount,
     User, Currency, Periodicity, SubCategory, Account
 )
-from apps.fintech.services.credit_service import CreditService
-from apps.fintech.services.installment_service import InstallmentService
+from apps.fintech.services.credit import CreditService, InstallmentService
 
 
 class CreditServiceTestCase(TestCase):

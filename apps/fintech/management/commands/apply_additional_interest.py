@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import F
 from apps.fintech.models import Credit
-from apps.fintech.services.credit_adjustment_service import CreditAdjustmentService
+from apps.fintech.services.credit import CreditAdjustmentService
 
 
 class Command(BaseCommand):

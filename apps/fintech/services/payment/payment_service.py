@@ -5,7 +5,7 @@ from typing import Dict, Optional, Tuple, Any
 import logging
 
 from apps.fintech.services.transaction.transaction_manager import TransactionManager
-from apps.fintech.services.audit.audit_logger import AuditLogger
+from apps.fintech.services.utils.audit.audit_logger import AuditLogger
 
 User = get_user_model()
 logger = logging.getLogger(__name__)

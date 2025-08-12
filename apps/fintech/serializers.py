@@ -143,22 +143,22 @@ class InstallmentSerializer(serializers.ModelSerializer):
     
     def get_remaining_amount_calc(self, obj):
         """Monto restante calculado"""
-        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        from apps.fintech.services.utils import InstallmentCalculator
         return InstallmentCalculator.get_remaining_amount(obj)
     
     def get_days_overdue_calc(self, obj):
         """Días de mora calculados"""
-        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        from apps.fintech.services.utils import InstallmentCalculator
         return InstallmentCalculator.get_days_overdue(obj)
     
     def get_late_fee_calc(self, obj):
         """Recargo por mora calculado"""
-        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        from apps.fintech.services.utils import InstallmentCalculator
         return InstallmentCalculator.get_late_fee(obj)
     
     def get_total_amount_due(self, obj):
         """Total a pagar calculado"""
-        from apps.fintech.services.installment_calculator import InstallmentCalculator
+        from apps.fintech.services.utils import InstallmentCalculator
         return InstallmentCalculator.get_total_amount_due(obj)
 
 class CreditFilterSerializer(serializers.Serializer):

@@ -51,8 +51,7 @@ THIRD_PARTY_APPS = [
 
 PROJECT_APPS = [
     'apps.fintech',
-    'apps.dashboard',
-    'apps.notifications'
+    'apps.dashboard'
 ]
 
 INSTALLED_APPS = [
@@ -66,7 +65,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'apps.fintech',
     'apps.dashboard',
-    'apps.notifications',
+
     'apps.revenue',
     'apps.forecasting',
     'apps.insights',  # Nueva aplicación

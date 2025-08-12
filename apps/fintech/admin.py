@@ -27,7 +27,7 @@ from .models import (
 from django import forms
 from .models import Transaction, Credit
 from django.db.models import Q
-from apps.fintech.services.installment_calculator import InstallmentCalculator
+from apps.fintech.services.utils import InstallmentCalculator
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
