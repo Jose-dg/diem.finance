@@ -31,7 +31,7 @@ def update_earnings_on_transaction(sender, instance, created, **kwargs):
     """
     Actualiza CreditEarnings cuando hay una nueva transacción confirmada.
     """
-    if instance.is_confirmed and instance.is_income:
+    if instance.status == 'confirmed' and instance.transaction_type == 'income':
         # Obtener créditos afectados por la transacción
         credit_ids = AccountMethodAmount.objects.filter(
             transaction=instance

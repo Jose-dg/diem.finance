@@ -133,12 +133,16 @@ def handle_transaction_delete(sender, instance, **kwargs):
     """
     Recalcula el crédito completo si se elimina una transacción que afecta el saldo.
     """
-    if instance.credit and instance.credit.uid not in _recalculating_credits:
-        _recalculating_credits.add(instance.credit.uid)
-        try:
-            recalculate_credit(instance.credit.uid)
-        finally:
-            _recalculating_credits.discard(instance.credit.uid)
+    # Obtener créditos afectados por la transacción a través de AccountMethodAmount
+    credit_ids = instance.account_method_amounts.values_list('credit_id', flat=True).distinct()
+    
+    for credit_id in credit_ids:
+        if credit_id not in _recalculating_credits:
+            _recalculating_credits.add(credit_id)
+            try:
+                recalculate_credit(credit_id)
+            finally:
+                _recalculating_credits.discard(credit_id)
     
 @receiver(post_save, sender=CreditAdjustment)
 def handle_credit_adjustment_save(sender, instance, created, **kwargs):
