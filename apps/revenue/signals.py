@@ -2,6 +2,7 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import transaction
 from django.utils import timezone
+from decimal import Decimal
 
 from apps.fintech.models import Credit, Transaction, AccountMethodAmount
 from .models import CreditEarnings, EarningsAdjustment
@@ -17,9 +18,9 @@ def create_credit_earnings(sender, instance, created, **kwargs):
         theoretical = EarningsService.calculate_theoretical_earnings(instance)
         CreditEarnings.objects.create(
             credit=instance,
-            theoretical=theoretical,
-            realized=0,
-            pending=theoretical
+            theoretical_earnings=theoretical,
+            realized_earnings=Decimal('0.00'),
+            earnings_rate=Decimal('0.0000')
         )
     else:
         # Si el crédito se actualizó, programar recálculo de ganancias

@@ -466,9 +466,9 @@ class Credit(models.Model):
         try:
             with db_transaction.atomic():
                 is_new = self.pk is None
-                cost = Decimal(self.cost)
-                price = Decimal(self.price)
-                credit_days = Decimal(self.credit_days)
+                cost = Decimal(self.cost) if self.cost else Decimal('0.00')
+                price = Decimal(self.price) if self.price else Decimal('0.00')
+                credit_days = Decimal(self.credit_days) if self.credit_days else Decimal('0')
                 periodicity_days = Decimal(self.periodicity.days) if self.periodicity else Decimal(1)
 
                 if is_new:
