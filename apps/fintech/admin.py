@@ -316,12 +316,12 @@ class InstallmentAdmin(admin.ModelAdmin):
         
         return qs
     
-    # Deshabilitar creación/eliminación
+    # Permitir eliminación de cuotas solo para administradores
     def has_add_permission(self, request):
         return False
     
     def has_delete_permission(self, request, obj=None):
-        return False
+        return request.user.is_superuser or request.user.is_staff
 
 
 
