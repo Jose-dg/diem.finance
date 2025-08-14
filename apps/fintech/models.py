@@ -368,7 +368,7 @@ class Credit(models.Model):
 
     registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='credits_registered')
     seller = models.ForeignKey(Seller, on_delete=models.SET_NULL, null=True, blank=True, related_name='credits_made') 
-    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='credits')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credits')
 
     state = models.CharField(max_length=15, choices=ORDER_STATES, default='pending')
     subcategory = models.ForeignKey('SubCategory', null=True, blank=True, on_delete=models.SET_NULL)
@@ -436,14 +436,24 @@ class Credit(models.Model):
         Calcula los días efectivos para intereses, excluyendo domingos si aplica.
         """
         from apps.fintech.utils.root import should_exclude_sundays
+        from datetime import date
         
         if not should_exclude_sundays(self):
             return total_days
         
         # Para créditos con periodicidad < 30 días, excluir domingos
         effective_days = 0
-        current_date = self.first_date_payment
-        end_date = self.second_date_payment
+        
+        # Convertir fechas a objetos date si son strings
+        if isinstance(self.first_date_payment, str):
+            current_date = date.fromisoformat(self.first_date_payment)
+        else:
+            current_date = self.first_date_payment
+            
+        if isinstance(self.second_date_payment, str):
+            end_date = date.fromisoformat(self.second_date_payment)
+        else:
+            end_date = self.second_date_payment
         
         while current_date <= end_date:
             if current_date.weekday() != 6:  # No es domingo
@@ -478,7 +488,7 @@ class Credit(models.Model):
 
                 if cost and price and credit_days:
                     # Calcular días efectivos para intereses (excluyendo domingos si aplica)
-                    effective_days = self._calculate_effective_days(credit_days)
+                    effective_days = self._calculate_effective_days(int(credit_days))
                     self.interest = (Decimal(1) / (effective_days / Decimal(30))) * ((price - cost) / cost)
 
                 if self.periodicity and self.credit_days:
