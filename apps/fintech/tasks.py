@@ -212,7 +212,8 @@ def installment_daily_maintenance(self):
         
         # 3. Notificaciones de mora
         try:
-            count = send_overdue_notifications.delay()
+            from apps.fintech.utils.celery_utils import safe_delay_task
+            count = safe_delay_task(send_overdue_notifications)
             results['overdue_notifications'] = {'count': count}
             logger.info(f"Notificaciones enviadas: {count}")
         except Exception as e:
@@ -221,7 +222,8 @@ def installment_daily_maintenance(self):
         
         # 4. Generar cuotas para créditos nuevos
         try:
-            count = generate_installments_for_new_credits.delay()
+            from apps.fintech.utils.celery_utils import safe_delay_task
+            count = safe_delay_task(generate_installments_for_new_credits)
             results['new_installments'] = {'count': count}
             logger.info(f"Cuotas generadas: {count}")
         except Exception as e:

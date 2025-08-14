@@ -8,24 +8,8 @@ import logging
 from apps.fintech.models import Credit, Transaction, AccountMethodAmount
 from .models import CreditEarnings, EarningsAdjustment
 from .services.earnings_service import EarningsService
-from .tasks import update_credit_earnings, generate_earnings_snapshots
 
 logger = logging.getLogger(__name__)
-
-def safe_delay_task(task, *args, **kwargs):
-    """
-    Ejecuta una tarea de Celery de manera segura, manejando errores de conexión.
-    """
-    try:
-        return task.delay(*args, **kwargs)
-    except Exception as e:
-        logger.warning(f"No se pudo ejecutar tarea asíncrona {task.__name__}: {e}")
-        # En caso de error, ejecutar la tarea sincrónicamente
-        try:
-            return task.apply(args=args, kwargs=kwargs)
-        except Exception as sync_error:
-            logger.error(f"Error ejecutando tarea sincrónicamente {task.__name__}: {sync_error}")
-            return None
 
 @receiver(post_save, sender=Credit)
 def create_credit_earnings(sender, instance, created, **kwargs):
@@ -41,11 +25,16 @@ def create_credit_earnings(sender, instance, created, **kwargs):
             earnings_rate=Decimal('0.0000')
         )
     else:
-        # Si el crédito se actualizó, programar recálculo de ganancias
+        # Si el crédito se actualizó, actualizar ganancias de forma síncrona
         if hasattr(instance, 'earnings_detail'):
-            transaction.on_commit(
-                lambda: safe_delay_task(update_credit_earnings, instance.id)
-            )
+            try:
+                # Actualizar ganancias directamente
+                earnings = CreditEarnings.objects.filter(credit=instance).first()
+                if earnings:
+                    earnings.theoretical_earnings = EarningsService.calculate_theoretical_earnings(instance)
+                    earnings.save()
+            except Exception as e:
+                logger.error(f"Error actualizando ganancias para crédito {instance.id}: {e}")
 
 @receiver(post_save, sender=Transaction)
 def update_earnings_on_transaction(sender, instance, created, **kwargs):
@@ -58,11 +47,26 @@ def update_earnings_on_transaction(sender, instance, created, **kwargs):
             transaction=instance
         ).values_list('credit_id', flat=True).distinct()
         
-        # Programar actualización para cada crédito
+        # Actualizar ganancias de forma síncrona
         for credit_id in credit_ids:
-            transaction.on_commit(
-                lambda cid=credit_id: safe_delay_task(update_credit_earnings, cid)
-            )
+            try:
+                # Actualizar ganancias directamente
+                earnings = CreditEarnings.objects.filter(credit_id=credit_id).first()
+                if earnings:
+                    # Recalcular ganancias realizadas basadas en transacciones confirmadas
+                    from django.db.models import Sum
+                    total_income = Transaction.objects.filter(
+                        account_method_amounts__credit_id=credit_id,
+                        transaction_type='income',
+                        status='confirmed'
+                    ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
+                    
+                    earnings.realized_earnings = total_income
+                    if earnings.theoretical_earnings > 0:
+                        earnings.earnings_rate = (total_income / earnings.theoretical_earnings).quantize(Decimal('0.0001'))
+                    earnings.save()
+            except Exception as e:
+                logger.error(f"Error actualizando ganancias para crédito {credit_id}: {e}")
 
 @receiver(post_save, sender=EarningsAdjustment)
 def update_earnings_on_adjustment(sender, instance, created, **kwargs):
@@ -70,15 +74,30 @@ def update_earnings_on_adjustment(sender, instance, created, **kwargs):
     Actualiza CreditEarnings cuando se crea un ajuste.
     """
     if created:
-        transaction.on_commit(
-            lambda: safe_delay_task(update_credit_earnings, instance.credit_earnings.credit_id)
-        )
+        try:
+            # Actualizar ganancias directamente
+            earnings = CreditEarnings.objects.filter(credit=instance.credit_earnings.credit).first()
+            if earnings:
+                # Recalcular ganancias realizadas
+                from django.db.models import Sum
+                total_income = Transaction.objects.filter(
+                    account_method_amounts__credit=instance.credit_earnings.credit,
+                    transaction_type='income',
+                    status='confirmed'
+                ).aggregate(total=Sum('account_method_amounts__amount_paid'))['total'] or Decimal('0.00')
+                
+                earnings.realized_earnings = total_income
+                if earnings.theoretical_earnings > 0:
+                    earnings.earnings_rate = (total_income / earnings.theoretical_earnings).quantize(Decimal('0.0001'))
+                earnings.save()
+        except Exception as e:
+            logger.error(f"Error actualizando ganancias por ajuste: {e}")
 
-@receiver([post_save, post_delete], sender=CreditEarnings)
-def create_earnings_snapshot(sender, instance, **kwargs):
-    """
-    Genera un snapshot cuando cambian las ganancias.
-    """
-    transaction.on_commit(
-        lambda: safe_delay_task(generate_earnings_snapshots, batch_size=1)
-    ) 
+# Comentamos esta señal ya que los snapshots no son críticos para transacciones puntuales
+# @receiver([post_save, post_delete], sender=CreditEarnings)
+# def create_earnings_snapshot(sender, instance, **kwargs):
+#     """
+#     Genera un snapshot cuando cambian las ganancias.
+#     """
+#     # Los snapshots se pueden generar de forma periódica con Celery
+#     pass 

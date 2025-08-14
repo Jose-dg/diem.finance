@@ -80,69 +80,72 @@ def create_transaction_and_account_method(sender, instance, created, **kwargs):
             transaction=transaction  
         )
 
-@receiver(post_save, sender=Transaction)
-def handle_transaction_save(sender, instance, **kwargs):
-    """
-    Recalcula el crédito relacionado con una transacción de ingreso confirmada.
-    """
-    if instance.transaction_type != 'income' or instance.status != 'confirmed':
-        return
+# Comentamos esta señal para desacoplar el recálculo de créditos de la creación de transacciones
+# @receiver(post_save, sender=Transaction)
+# def handle_transaction_save(sender, instance, **kwargs):
+#     """
+#     Recalcula el crédito relacionado con una transacción de ingreso confirmada.
+#     """
+#     if instance.transaction_type != 'income' or instance.status != 'confirmed':
+#         return
+# 
+#     try:
+#         # Buscar el primer AccountMethodAmount relacionado a esta transacción
+#         ama = AccountMethodAmount.objects.filter(transaction=instance).select_related('credit').first()
+# 
+#         if ama and ama.credit and ama.credit.uid not in _recalculating_credits:
+#             _recalculating_credits.add(ama.credit.uid)
+#             try:
+#                 recalculate_credit(ama.credit.uid)
+#             finally:
+#                 _recalculating_credits.discard(ama.credit.uid)
+# 
+#     except Exception as e:
+#         # Recomendado para debug, puedes poner logging si lo prefieres
+#         print(f"[ERROR] No se pudo recalcular el crédito: {e}")
 
-    try:
-        # Buscar el primer AccountMethodAmount relacionado a esta transacción
-        ama = AccountMethodAmount.objects.filter(transaction=instance).select_related('credit').first()
-
-        if ama and ama.credit and ama.credit.uid not in _recalculating_credits:
-            _recalculating_credits.add(ama.credit.uid)
-            try:
-                recalculate_credit(ama.credit.uid)
-            finally:
-                _recalculating_credits.discard(ama.credit.uid)
-
-    except Exception as e:
-        # Recomendado para debug, puedes poner logging si lo prefieres
-        print(f"[ERROR] No se pudo recalcular el crédito: {e}")
-
-@receiver(post_save, sender=Transaction)
-def check_additional_interest_after_payment(sender, instance, created, **kwargs):
-    """
-    Verifica si se debe aplicar interés adicional después de un pago
-    """
-    if not created or instance.transaction_type != 'income' or instance.status != 'confirmed':
-        return
-    
-    try:
-        # Buscar créditos relacionados con esta transacción
-        credit_adjustments = instance.account_method_amounts.all()
+# Comentamos esta señal para desacoplar la verificación de interés adicional de la creación de transacciones
+# @receiver(post_save, sender=Transaction)
+# def check_additional_interest_after_payment(sender, instance, created, **kwargs):
+#     """
+#     Verifica si se debe aplicar interés adicional después de un pago
+#     """
+#     if not created or instance.transaction_type != 'income' or instance.status != 'confirmed':
+#         return
+#     
+#     try:
+#         # Buscar créditos relacionados con esta transacción
+#         credit_adjustments = instance.account_method_amounts.all()
+#         
+#         for credit_adjustment in credit_adjustments:
+#             credit = credit_adjustment.credit
+#             
+#             # Verificar si se debe aplicar interés adicional
+#             if CreditAdjustmentService.should_apply_additional_interest(credit):
+#                 CreditAdjustmentService.apply_additional_interest(
+#                     credit,
+#                     reason=f"Pago parcial detectado. Total pagado: {credit.total_abonos}, Total pactado: {credit.price}"
+#                 )
+#                 
+#     except Exception as e:
+#         print(f"[ERROR] No se pudo verificar interés adicional: {e}")
         
-        for credit_adjustment in credit_adjustments:
-            credit = credit_adjustment.credit
-            
-            # Verificar si se debe aplicar interés adicional
-            if CreditAdjustmentService.should_apply_additional_interest(credit):
-                CreditAdjustmentService.apply_additional_interest(
-                    credit,
-                    reason=f"Pago parcial detectado. Total pagado: {credit.total_abonos}, Total pactado: {credit.price}"
-                )
-                
-    except Exception as e:
-        print(f"[ERROR] No se pudo verificar interés adicional: {e}")
-        
-@receiver(post_delete, sender=Transaction)
-def handle_transaction_delete(sender, instance, **kwargs):
-    """
-    Recalcula el crédito completo si se elimina una transacción que afecta el saldo.
-    """
-    # Obtener créditos afectados por la transacción a través de AccountMethodAmount
-    credit_ids = instance.account_method_amounts.values_list('credit_id', flat=True).distinct()
-    
-    for credit_id in credit_ids:
-        if credit_id not in _recalculating_credits:
-            _recalculating_credits.add(credit_id)
-            try:
-                recalculate_credit(credit_id)
-            finally:
-                _recalculating_credits.discard(credit_id)
+# Comentamos esta señal para desacoplar el recálculo de créditos de la eliminación de transacciones
+# @receiver(post_delete, sender=Transaction)
+# def handle_transaction_delete(sender, instance, **kwargs):
+#     """
+#     Recalcula el crédito completo si se elimina una transacción que afecta el saldo.
+#     """
+#     # Obtener créditos afectados por la transacción a través de AccountMethodAmount
+#     credit_ids = instance.account_method_amounts.values_list('credit_id', flat=True).distinct()
+#     
+#     for credit_id in credit_ids:
+#         if credit_id not in _recalculating_credits:
+#             _recalculating_credits.add(credit_id)
+#             try:
+#                 recalculate_credit(credit_id)
+#             finally:
+#                 _recalculating_credits.discard(credit_id)
     
 @receiver(post_save, sender=CreditAdjustment)
 def handle_credit_adjustment_save(sender, instance, created, **kwargs):
@@ -177,20 +180,21 @@ def crear_cuotas_credito(sender, instance, created, **kwargs):
             return
         generar_cuotas(instance)
 
-@receiver(post_save, sender=AccountMethodAmount)
-def distribuir_pago(sender, instance, created, **kwargs):
-    if not created:
-        return
-
-    transaction = instance.transaction
-    fecha_pago = getattr(transaction, 'created_at', None)
-
-    if not fecha_pago:
-        fecha_pago = timezone.now().date()
-    else:
-        fecha_pago = fecha_pago.date()
-
-    distribuir_pago_a_cuotas(instance.credit, instance.amount_paid, fecha_pago)
+# Comentamos esta señal para desacoplar la distribución de cuotas de la creación de transacciones
+# @receiver(post_save, sender=AccountMethodAmount)
+# def distribuir_pago(sender, instance, created, **kwargs):
+#     if not created:
+#         return
+# 
+#     transaction = instance.transaction
+#     fecha_pago = getattr(transaction, 'created_at', None)
+# 
+#     if not fecha_pago:
+#         fecha_pago = timezone.now().date()
+#     else:
+#         fecha_pago = fecha_pago.date()
+# 
+#     distribuir_pago_a_cuotas(instance.credit, instance.amount_paid, fecha_pago)
 
 
 @receiver(post_save, sender=Installment)

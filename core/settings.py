@@ -235,7 +235,13 @@ CACHES = {
 
 # Celery Configuration
 # Configuración que usa REDIS_URL si está disponible, sino usa localhost
-REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+REDIS_URL = os.environ.get('REDIS_URL')
+
+# Debug: Imprimir la configuración de Redis para verificar
+import logging
+logger = logging.getLogger(__name__)
+logger.info(f"REDIS_URL configurado: {REDIS_URL}")
+logger.info(f"REDIS_URL desde env: {os.environ.get('REDIS_URL', 'NO_ENCONTRADO')}")
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
@@ -324,3 +330,4 @@ SIMPLE_JWT = {
 
 
 
+# Revisarla forma en como se buscan las personas en el sistema desde transactions para hacer lo mismo en credits
