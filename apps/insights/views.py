@@ -5,8 +5,10 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from django.core.exceptions import ValidationError
+from django.db.models import Sum, Count, Avg
+from decimal import Decimal
 
 from apps.insights.services.analytics_service import AnalyticsService
 from apps.insights.services.dashboard_service import DashboardService
@@ -533,6 +535,410 @@ class CreditAnalysisClientsView(APIView):
                     'risk_level': risk_level,
                     'sort_by': sort_by
                 }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class FinancialControlDashboardView(APIView):
+    """Vista para dashboard de control financiero"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """Obtener dashboard de control financiero"""
+        try:
+            from apps.insights.services.financial_control_service import FinancialControlService
+            
+            dashboard_data = FinancialControlService.get_financial_control_dashboard()
+            
+            return Response({
+                'success': True,
+                'data': dashboard_data
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class DefaultersListView(APIView):
+    """Vista para lista paginada de clientes morosos"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """Obtener lista paginada de clientes morosos"""
+        try:
+            from apps.insights.services.financial_control_service import FinancialControlService
+            
+            # Parámetros de paginación
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+            
+            # Validar límites de paginación
+            page_size = min(max(page_size, 1), 100)  # Entre 1 y 100
+            
+            # Filtros
+            filters = {}
+            if request.query_params.get('risk_level'):
+                filters['risk_level'] = request.query_params.get('risk_level')
+            if request.query_params.get('min_overdue_amount'):
+                filters['min_overdue_amount'] = request.query_params.get('min_overdue_amount')
+            if request.query_params.get('max_overdue_amount'):
+                filters['max_overdue_amount'] = request.query_params.get('max_overdue_amount')
+            if request.query_params.get('min_days_overdue'):
+                filters['min_days_overdue'] = request.query_params.get('min_days_overdue')
+            
+            # Obtener datos paginados
+            result = FinancialControlService.get_defaulters_list(
+                page=page, 
+                page_size=page_size, 
+                filters=filters
+            )
+            
+            return Response({
+                'success': True,
+                'data': result
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class UserFinancialMetricsView(APIView):
+    """Vista para métricas financieras de un usuario específico"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, user_id=None):
+        """Obtener métricas financieras de un usuario"""
+        try:
+            from apps.insights.services.financial_control_service import FinancialControlService
+            
+            # Si no se especifica user_id, usar el usuario actual
+            if user_id is None:
+                user = request.user
+            else:
+                from apps.fintech.models import User
+                try:
+                    user = User.objects.get(id=user_id)
+                except User.DoesNotExist:
+                    return Response({
+                        'success': False,
+                        'error': 'Usuario no encontrado'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Calcular métricas
+            metrics = FinancialControlService.calculate_user_financial_metrics(user)
+            
+            if metrics:
+                from apps.insights.serializers import FinancialControlMetricsSerializer
+                serializer = FinancialControlMetricsSerializer(metrics)
+                
+                return Response({
+                    'success': True,
+                    'data': serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'No se pudieron calcular las métricas'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class FinancialAlertsView(APIView):
+    """Vista para alertas financieras"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """Obtener alertas financieras con paginación"""
+        try:
+            from apps.insights.models import FinancialAlert
+            from apps.insights.serializers import FinancialAlertSerializer
+            
+            # Parámetros de paginación
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+            page_size = min(max(page_size, 1), 100)
+            
+            # Filtros
+            queryset = FinancialAlert.objects.select_related('user', 'assigned_to').order_by('-created_at')
+            
+            if request.query_params.get('status'):
+                queryset = queryset.filter(status=request.query_params.get('status'))
+            
+            if request.query_params.get('priority'):
+                queryset = queryset.filter(priority=request.query_params.get('priority'))
+            
+            if request.query_params.get('alert_type'):
+                queryset = queryset.filter(alert_type=request.query_params.get('alert_type'))
+            
+            # Paginación
+            from django.core.paginator import Paginator
+            paginator = Paginator(queryset, page_size)
+            page_obj = paginator.get_page(page)
+            
+            # Serializar resultados
+            serializer = FinancialAlertSerializer(page_obj, many=True)
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'results': serializer.data,
+                    'pagination': {
+                        'count': paginator.count,
+                        'num_pages': paginator.num_pages,
+                        'current_page': page_obj.number,
+                        'has_next': page_obj.has_next(),
+                        'has_previous': page_obj.has_previous(),
+                        'next_page': page_obj.next_page_number() if page_obj.has_next() else None,
+                        'previous_page': page_obj.previous_page_number() if page_obj.has_previous() else None,
+                    }
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def post(self, request):
+        """Crear nueva alerta financiera"""
+        try:
+            from apps.insights.services.financial_control_service import FinancialControlService
+            from apps.fintech.models import User
+            
+            # Validar datos requeridos
+            user_id = request.data.get('user_id')
+            alert_type = request.data.get('alert_type')
+            title = request.data.get('title')
+            description = request.data.get('description')
+            
+            if not all([user_id, alert_type, title, description]):
+                return Response({
+                    'success': False,
+                    'error': 'Faltan campos requeridos: user_id, alert_type, title, description'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener usuario
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': 'Usuario no encontrado'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Crear alerta
+            alert = FinancialControlService.create_financial_alert(
+                user=user,
+                alert_type=alert_type,
+                title=title,
+                description=description,
+                priority=request.data.get('priority', 'medium'),
+                alert_data=request.data.get('alert_data', {})
+            )
+            
+            if alert:
+                from apps.insights.serializers import FinancialAlertSerializer
+                serializer = FinancialAlertSerializer(alert)
+                
+                return Response({
+                    'success': True,
+                    'data': serializer.data
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'No se pudo crear la alerta'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class DefaultersReportsView(APIView):
+    """Vista para reportes de morosos"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """Obtener reportes de morosos con paginación"""
+        try:
+            from apps.insights.models import DefaultersReport
+            from apps.insights.serializers import DefaultersReportSerializer
+            
+            # Parámetros de paginación
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
+            page_size = min(max(page_size, 1), 50)
+            
+            # Filtros
+            queryset = DefaultersReport.objects.select_related('generated_by').order_by('-report_date')
+            
+            if request.query_params.get('report_type'):
+                queryset = queryset.filter(report_type=request.query_params.get('report_type'))
+            
+            # Paginación
+            from django.core.paginator import Paginator
+            paginator = Paginator(queryset, page_size)
+            page_obj = paginator.get_page(page)
+            
+            # Serializar resultados
+            serializer = DefaultersReportSerializer(page_obj, many=True)
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'results': serializer.data,
+                    'pagination': {
+                        'count': paginator.count,
+                        'num_pages': paginator.num_pages,
+                        'current_page': page_obj.number,
+                        'has_next': page_obj.has_next(),
+                        'has_previous': page_obj.has_previous(),
+                        'next_page': page_obj.next_page_number() if page_obj.has_next() else None,
+                        'previous_page': page_obj.previous_page_number() if page_obj.has_previous() else None,
+                    }
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def post(self, request):
+        """Generar nuevo reporte de morosos"""
+        try:
+            from apps.insights.services.financial_control_service import FinancialControlService
+            
+            report_type = request.data.get('report_type', 'daily')
+            
+            # Generar reporte
+            report = FinancialControlService.generate_defaulters_report(
+                report_type=report_type,
+                generated_by=request.user
+            )
+            
+            if report:
+                from apps.insights.serializers import DefaultersReportSerializer
+                serializer = DefaultersReportSerializer(report)
+                
+                return Response({
+                    'success': True,
+                    'data': serializer.data
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'No se pudo generar el reporte'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class EnhancedDefaultersInsightsView(APIView):
+    """Vista mejorada para insights de clientes morosos"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """Obtener insights mejorados de clientes morosos"""
+        try:
+            from apps.insights.services.financial_control_service import FinancialControlService
+            from apps.insights.models import FinancialControlMetrics, FinancialAlert
+            
+            # Métricas generales
+            total_defaulters = FinancialControlMetrics.objects.filter(
+                overdue_credits_count__gt=0
+            ).count()
+            
+            total_overdue_amount = FinancialControlMetrics.objects.aggregate(
+                total=Sum('total_overdue_amount')
+            )['total'] or Decimal('0.00')
+            
+            # Distribución por riesgo
+            risk_distribution = FinancialControlMetrics.objects.values('risk_level').annotate(
+                count=Count('id'),
+                total_amount=Sum('total_overdue_amount'),
+                avg_days=Avg('days_in_default')
+            )
+            
+            # Top 10 morosos por monto
+            top_defaulters = FinancialControlMetrics.objects.filter(
+                overdue_credits_count__gt=0
+            ).select_related('user').order_by('-total_overdue_amount')[:10]
+            
+            # Alertas activas por prioridad
+            alerts_by_priority = FinancialAlert.objects.filter(
+                status='active'
+            ).values('priority').annotate(count=Count('id'))
+            
+            # Tendencias (últimos 7 días)
+            seven_days_ago = timezone.now() - timedelta(days=7)
+            new_defaulters_7_days = FinancialControlMetrics.objects.filter(
+                last_calculation__gte=seven_days_ago,
+                overdue_credits_count__gt=0
+            ).count()
+            
+            # Potencial de recuperación
+            high_recovery = FinancialControlMetrics.objects.filter(
+                risk_level__in=['low', 'medium'],
+                days_in_default__lte=30
+            ).count()
+            
+            medium_recovery = FinancialControlMetrics.objects.filter(
+                risk_level='high',
+                days_in_default__lte=60
+            ).count()
+            
+            insights = {
+                'summary': {
+                    'total_defaulters': total_defaulters,
+                    'total_overdue_amount': total_overdue_amount,
+                    'new_defaulters_7_days': new_defaulters_7_days,
+                    'default_rate': (total_defaulters / User.objects.count() * 100) if User.objects.count() > 0 else 0
+                },
+                'risk_distribution': list(risk_distribution),
+                'top_defaulters': [
+                    {
+                        'user': {
+                            'id': metric.user.id,
+                            'username': metric.user.username,
+                            'email': metric.user.email
+                        },
+                        'total_overdue_amount': float(metric.total_overdue_amount),
+                        'overdue_credits_count': metric.overdue_credits_count,
+                        'days_in_default': metric.days_in_default,
+                        'risk_level': metric.risk_level,
+                        'risk_score': float(metric.risk_score)
+                    }
+                    for metric in top_defaulters
+                ],
+                'alerts_by_priority': list(alerts_by_priority),
+                'recovery_potential': {
+                    'high': high_recovery,
+                    'medium': medium_recovery,
+                    'total_recoverable': high_recovery + medium_recovery
+                }
+            }
+            
+            return Response({
+                'success': True,
+                'data': insights
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

@@ -25,5 +25,14 @@ urlpatterns = [
     path('summary/', views.InsightsSummaryView.as_view(), name='insights_summary'),
     path('health-check/', views.insights_health_check, name='health_check'),
     path('export/', views.insights_export, name='export_data'),
+    
+    # FINANCIAL CONTROL SYSTEM - Nuevas URLs
+    path('financial-control/dashboard/', views.FinancialControlDashboardView.as_view(), name='financial_control_dashboard'),
+    path('financial-control/defaulters/', views.DefaultersListView.as_view(), name='defaulters_list'),
+    path('financial-control/defaulters/enhanced/', views.EnhancedDefaultersInsightsView.as_view(), name='enhanced_defaulters_insights'),
+    path('financial-control/metrics/user/', views.UserFinancialMetricsView.as_view(), name='user_financial_metrics'),
+    path('financial-control/metrics/user/<int:user_id>/', views.UserFinancialMetricsView.as_view(), name='user_financial_metrics_detail'),
+    path('financial-control/alerts/', views.FinancialAlertsView.as_view(), name='financial_alerts'),
+    path('financial-control/reports/', views.DefaultersReportsView.as_view(), name='defaulters_reports'),
 ]
 

@@ -114,3 +114,118 @@ class ExportDataSerializer(serializers.Serializer):
     format = serializers.CharField()
     data = serializers.DictField()
 
+class FinancialControlMetricsSerializer(serializers.ModelSerializer):
+    """Serializer para métricas de control financiero"""
+    user = serializers.SerializerMethodField()
+    overdue_percentage = serializers.SerializerMethodField()
+    is_high_risk = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FinancialControlMetrics
+        fields = [
+            'id', 'user', 'total_overdue_amount', 'overdue_credits_count',
+            'days_in_default', 'max_days_overdue', 'risk_level', 'risk_score',
+            'payment_frequency', 'avg_payment_delay', 'overdue_percentage',
+            'is_high_risk', 'last_calculation'
+        ]
+    
+    def get_user(self, obj):
+        return {
+            'id': obj.user.id,
+            'username': obj.user.username,
+            'email': obj.user.email,
+            'first_name': obj.user.first_name,
+            'last_name': obj.user.last_name
+        }
+    
+    def get_overdue_percentage(self, obj):
+        return obj.overdue_percentage
+    
+    def get_is_high_risk(self, obj):
+        return obj.is_high_risk
+
+class FinancialAlertSerializer(serializers.ModelSerializer):
+    """Serializer para alertas financieras"""
+    user = serializers.SerializerMethodField()
+    assigned_to = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FinancialAlert
+        fields = [
+            'id', 'user', 'alert_type', 'priority', 'status', 'title',
+            'description', 'alert_data', 'created_at', 'acknowledged_at',
+            'resolved_at', 'expires_at', 'assigned_to', 'is_expired',
+            'is_active', 'notification_sent', 'notification_channels'
+        ]
+    
+    def get_user(self, obj):
+        return {
+            'id': obj.user.id,
+            'username': obj.user.username,
+            'email': obj.user.email
+        }
+    
+    def get_assigned_to(self, obj):
+        if obj.assigned_to:
+            return {
+                'id': obj.assigned_to.id,
+                'username': obj.assigned_to.username,
+                'email': obj.assigned_to.email
+            }
+        return None
+    
+    def get_is_expired(self, obj):
+        return obj.is_expired
+    
+    def get_is_active(self, obj):
+        return obj.is_active
+
+class DefaultersReportSerializer(serializers.ModelSerializer):
+    """Serializer para reportes de morosos"""
+    generated_by = serializers.SerializerMethodField()
+    total_risk_count = serializers.SerializerMethodField()
+    high_risk_percentage = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DefaultersReport
+        fields = [
+            'id', 'report_type', 'report_date', 'total_defaulters',
+            'total_overdue_amount', 'avg_days_overdue', 'low_risk_count',
+            'medium_risk_count', 'high_risk_count', 'critical_risk_count',
+            'total_risk_count', 'high_risk_percentage', 'defaulters_data',
+            'risk_distribution', 'recovery_potential', 'generated_by',
+            'generation_metadata'
+        ]
+    
+    def get_generated_by(self, obj):
+        if obj.generated_by:
+            return {
+                'id': obj.generated_by.id,
+                'username': obj.generated_by.username,
+                'email': obj.generated_by.email
+            }
+        return None
+    
+    def get_total_risk_count(self, obj):
+        return obj.total_risk_count
+    
+    def get_high_risk_percentage(self, obj):
+        return obj.high_risk_percentage
+
+class DefaultersListSerializer(serializers.Serializer):
+    """Serializer para lista paginada de morosos"""
+    results = FinancialControlMetricsSerializer(many=True)
+    pagination = serializers.DictField()
+
+class FinancialControlDashboardSerializer(serializers.Serializer):
+    """Serializer para dashboard de control financiero"""
+    total_metrics = serializers.IntegerField()
+    active_defaulters = serializers.IntegerField()
+    total_overdue_amount = serializers.DecimalField(max_digits=15, decimal_places=2)
+    risk_distribution = serializers.ListField()
+    active_alerts = serializers.IntegerField()
+    new_defaulters_30_days = serializers.IntegerField()
+    default_rate = serializers.DecimalField(max_digits=5, decimal_places=2)
+
