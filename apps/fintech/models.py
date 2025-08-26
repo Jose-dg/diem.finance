@@ -406,6 +406,121 @@ class Credit(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+    
+    @property
+    def percentage_paid(self):
+        """Calcula el porcentaje pagado del crédito"""
+        if self.price and self.price > 0:
+            return (self.total_abonos / self.price) * 100
+        return 0
+    
+    @property
+    def days_since_creation(self):
+        """Calcula los días transcurridos desde la creación"""
+        from django.utils import timezone
+        if self.created_at:
+            return (timezone.now() - self.created_at).days
+        return 0
+    
+    @property
+    def credit_days_calculated(self):
+        """Calcula los días totales del crédito"""
+        if self.first_date_payment and self.second_date_payment:
+            return (self.second_date_payment - self.first_date_payment).days
+        return self.credit_days or 0
+    
+    @property
+    def interest_rate_calculated(self):
+        """Calcula la tasa de interés del crédito"""
+        if self.interest:
+            return float(self.interest)
+        
+        # Calcular tasa de interés basada en earnings y cost
+        if self.cost and self.cost > 0:
+            return float((self.earnings / self.cost) * 100)
+        
+        return 0
+    
+    @property
+    def next_due_date(self):
+        """Obtiene la próxima fecha de vencimiento de cuota pendiente"""
+        next_installment = self.installments.filter(
+            status='pending'
+        ).order_by('due_date').first()
+        
+        return next_installment.due_date if next_installment else None
+    
+    @property
+    def paid_installments_count(self):
+        """Cuenta las cuotas pagadas"""
+        return self.installments.filter(status='paid').count()
+    
+    @property
+    def overdue_installments_count(self):
+        """Cuenta las cuotas vencidas"""
+        return self.installments.filter(status='overdue').count()
+    
+    @property
+    def total_installments_count(self):
+        """Cuenta el total de cuotas"""
+        return self.installments.count()
+    
+    @property
+    def average_payment_delay(self):
+        """Calcula el promedio de días de retraso en pagos"""
+        overdue_installments = self.installments.filter(
+            status='overdue',
+            paid_on__isnull=False
+        )
+        
+        if overdue_installments.exists():
+            total_delay = 0
+            count = 0
+            
+            for installment in overdue_installments:
+                if installment.due_date and installment.paid_on:
+                    delay = (installment.paid_on - installment.due_date).days
+                    if delay > 0:
+                        total_delay += delay
+                        count += 1
+            
+            return total_delay / count if count > 0 else 0
+        
+        return 0
+    
+    @property
+    def risk_score(self):
+        """Calcula la puntuación de riesgo basada en mora y pagos"""
+        score = 50  # Puntuación base
+        
+        # Factor por nivel de morosidad
+        morosidad_factors = {
+            'on_time': 0,
+            'mild_default': -10,
+            'moderate_default': -20,
+            'severe_default': -30,
+            'recurrent_default': -40,
+            'critical_default': -50
+        }
+        
+        score += morosidad_factors.get(self.morosidad_level, 0)
+        
+        # Factor por cuotas vencidas
+        score -= self.overdue_installments_count * 5
+        
+        # Factor por porcentaje pagado
+        if self.percentage_paid < 25:
+            score -= 20
+        elif self.percentage_paid < 50:
+            score -= 10
+        elif self.percentage_paid > 75:
+            score += 10
+        
+        # Factor por días desde creación
+        if self.days_since_creation > 365:
+            score -= 10
+        
+        return max(0, min(100, score))
 
     def update_total_abonos(self, amount_paid_difference):
         """
@@ -679,3 +794,91 @@ class Installment(models.Model):
                 user_name = self.credit.user.username
             return f"Cuota #{self.number} - {user_name} - Crédito: {self.credit.uid}"
         return f"Cuota #{self.number or '?'} - Crédito: {self.credit.uid if self.credit else 'N/A'}"
+    
+    @property
+    def days_until_due(self):
+        """Calcula los días hasta el vencimiento (negativo si ya venció)"""
+        from django.utils import timezone
+        if self.due_date:
+            return (self.due_date - timezone.now().date()).days
+        return None
+    
+    @property
+    def is_overdue(self):
+        """Indica si la cuota está vencida"""
+        return self.status == 'pending' and self.due_date and timezone.now().date() > self.due_date
+    
+    @property
+    def percentage_paid(self):
+        """Calcula el porcentaje pagado de la cuota"""
+        if self.amount and self.amount > 0:
+            return (self.amount_paid / self.amount) * 100
+        return 0
+    
+    @property
+    def collection_priority(self):
+        """Calcula la prioridad de recaudo de la cuota"""
+        if not self.due_date:
+            return 'low'
+        
+        days_until_due = self.days_until_due
+        
+        # Alta prioridad si está vencida o vence en menos de 3 días
+        if days_until_due is None or days_until_due < 0 or days_until_due <= 3:
+            return 'high'
+        
+        # Media prioridad si vence en menos de 7 días
+        if days_until_due <= 7:
+            return 'medium'
+        
+        return 'low'
+    
+    @property
+    def risk_level(self):
+        """Calcula el nivel de riesgo de no pago"""
+        risk_factors = 0
+        
+        # Factor por estado de la cuota
+        if self.status == 'overdue':
+            risk_factors += 30
+        
+        # Factor por monto
+        if self.amount and self.amount > 500000:  # Más de 500k
+            risk_factors += 10
+        
+        # Factor por días de retraso
+        if self.days_overdue > 30:
+            risk_factors += 20
+        elif self.days_overdue > 15:
+            risk_factors += 10
+        
+        # Clasificar nivel de riesgo
+        if risk_factors >= 50:
+            return 'high'
+        elif risk_factors >= 25:
+            return 'medium'
+        else:
+            return 'low'
+    
+    @property
+    def expected_collection_date(self):
+        """Calcula la fecha esperada de recaudo basada en historial"""
+        if not self.due_date:
+            return None
+        
+        # Si ya está pagada, retornar fecha de pago
+        if self.status == 'paid' and self.paid_on:
+            return self.paid_on
+        
+        # Calcular promedio de días de retraso del cliente
+        if self.credit and self.credit.user:
+            avg_delay = self.credit.user.credits.aggregate(
+                avg_delay=Avg('average_payment_delay')
+            )['avg_delay'] or 0
+            
+            # Fecha esperada = fecha de vencimiento + promedio de retraso
+            from datetime import timedelta
+            expected_date = self.due_date + timedelta(days=avg_delay)
+            return expected_date
+        
+        return self.due_date

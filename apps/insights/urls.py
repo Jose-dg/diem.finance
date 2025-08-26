@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from . import views
 
 app_name = 'insights'
@@ -34,5 +34,12 @@ urlpatterns = [
     path('financial-control/metrics/user/<int:user_id>/', views.UserFinancialMetricsView.as_view(), name='user_financial_metrics_detail'),
     path('financial-control/alerts/', views.FinancialAlertsView.as_view(), name='financial_alerts'),
     path('financial-control/reports/', views.DefaultersReportsView.as_view(), name='defaulters_reports'),
+    
+    # NUEVAS VISTAS DE DASHBOARD OPTIMIZADAS
+    path('api/credits/dashboard/', views.CreditDashboardViewSet.as_view({'get': 'list'}), name='credits_dashboard'),
+    path('api/installments/expected-collection/', views.InstallmentCollectionViewSet.as_view({'get': 'list'}), name='installments_collection'),
+    path('api/dashboard/summary/', views.DashboardSummaryView.as_view(), name='dashboard_summary'),
+    path('api/credits/analytics/', views.CreditAnalyticsAdvancedView.as_view(), name='credits_analytics_advanced'),
+    path('api/risk/analysis/', views.RiskAnalysisAdvancedView.as_view(), name='risk_analysis_advanced'),
 ]
 

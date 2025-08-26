@@ -951,3 +951,333 @@ class EnhancedDefaultersInsightsView(APIView):
 # 4bbe3fe6a5aea88f93919b1e33170ee1
 
 # k6Kav~SPE$
+
+# =============================================================================
+# NUEVAS VISTAS DE DASHBOARD OPTIMIZADAS
+# =============================================================================
+
+from rest_framework.viewsets import ReadOnlyModelViewSet
+from django.db.models import Q, F, ExpressionWrapper, DecimalField
+from django.db.models.functions import Coalesce, ExtractDay
+from apps.insights.serializers.dashboard_serializers import (
+    CreditDashboardSerializer,
+    InstallmentCollectionSerializer,
+    DashboardSummarySerializer
+)
+from apps.insights.utils.pagination import CustomPageNumberPagination
+from apps.insights.utils.dashboard_helpers import (
+    get_optimized_credit_queryset,
+    get_optimized_installment_queryset,
+    get_alerts,
+    get_by_periodicity_metrics
+)
+from apps.insights.utils.calculations import (
+    calculate_performance_metrics
+)
+
+class CreditDashboardViewSet(ReadOnlyModelViewSet):
+    """ViewSet para dashboard de créditos con cálculos optimizados"""
+    serializer_class = CreditDashboardSerializer
+    pagination_class = CustomPageNumberPagination
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Retorna queryset optimizado para créditos"""
+        queryset = get_optimized_credit_queryset()
+        
+        # Aplicar ordenamiento si se especifica
+        ordering = self.request.query_params.get('ordering', '-created_at')
+        if ordering:
+            queryset = queryset.order_by(ordering)
+        
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        """Lista paginada de créditos con cálculos"""
+        try:
+            queryset = self.get_queryset()
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class InstallmentCollectionViewSet(ReadOnlyModelViewSet):
+    """ViewSet para recaudo esperado con proyecciones"""
+    serializer_class = InstallmentCollectionSerializer
+    pagination_class = CustomPageNumberPagination
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Retorna queryset optimizado para cuotas"""
+        queryset = get_optimized_installment_queryset()
+        
+        # Aplicar ordenamiento si se especifica
+        ordering = self.request.query_params.get('ordering', 'due_date')
+        if ordering:
+            queryset = queryset.order_by(ordering)
+        
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        """Lista paginada de cuotas con información de recaudo"""
+        try:
+            queryset = self.get_queryset()
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class DashboardSummaryView(APIView):
+    """Vista para métricas resumidas del dashboard"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Obtener métricas calculadas para el dashboard"""
+        try:
+            from apps.fintech.models import Credit, Installment
+            
+            # Calcular métricas de rendimiento
+            performance_metrics = calculate_performance_metrics()
+            
+            # Obtener alertas
+            alerts = get_alerts()
+            
+            # Obtener métricas por periodicidad
+            by_periodicity = get_by_periodicity_metrics()
+            
+            # Calcular recaudo esperado
+            expected_collection_today = Installment.objects.filter(
+                due_date=timezone.now().date(),
+                status='pending'
+            ).aggregate(
+                total=Coalesce(Sum('amount'), 0)
+            )['total'] or 0
+            
+            expected_collection_week = Installment.objects.filter(
+                due_date__range=[
+                    timezone.now().date(),
+                    timezone.now().date() + timedelta(days=7)
+                ],
+                status='pending'
+            ).aggregate(
+                total=Coalesce(Sum('amount'), 0)
+            )['total'] or 0
+            
+            # Calcular tasa de mora
+            total_credits = Credit.objects.filter(state='pending').count()
+            defaulted_credits = Credit.objects.filter(
+                state='pending',
+                morosidad_level__in=['mild_default', 'moderate_default', 'severe_default', 'critical_default']
+            ).count()
+            
+            default_rate = (defaulted_credits / total_credits * 100) if total_credits > 0 else 0
+            
+            # Calcular tasa de recuperación
+            recovered_credits = Credit.objects.filter(
+                state='completed'
+            ).count()
+            
+            total_historical_credits = Credit.objects.count()
+            recovery_rate = (recovered_credits / total_historical_credits * 100) if total_historical_credits > 0 else 0
+            
+            # Construir respuesta
+            summary_data = {
+                'credits_summary': {
+                    'total_active_credits': performance_metrics['total_active_credits'],
+                    'total_amount_lent': str(performance_metrics['total_amount_lent']),
+                    'total_pending_amount': str(performance_metrics['total_pending_amount']),
+                    'total_collected': str(performance_metrics['total_collected']),
+                    'average_credit_amount': str(performance_metrics['average_credit_amount']),
+                    'collection_percentage': performance_metrics['collection_percentage']
+                },
+                'installments_summary': {
+                    'due_today': performance_metrics['due_today'],
+                    'due_this_week': performance_metrics['due_this_week'],
+                    'overdue_total': performance_metrics['overdue_total'],
+                    'expected_collection_today': str(expected_collection_today),
+                    'expected_collection_week': str(expected_collection_week)
+                },
+                'performance_metrics': {
+                    'on_time_payment_rate': performance_metrics['on_time_payment_rate'],
+                    'average_delay_days': performance_metrics['average_delay_days'],
+                    'default_rate': round(default_rate, 1),
+                    'recovery_rate': round(recovery_rate, 1)
+                },
+                'by_periodicity': by_periodicity,
+                'alerts': alerts
+            }
+            
+            serializer = DashboardSummarySerializer(summary_data)
+            return Response({
+                'success': True,
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class CreditAnalyticsAdvancedView(APIView):
+    """Vista para analytics avanzados de créditos"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Obtener analytics detallados de créditos con filtros y agrupaciones"""
+        try:
+            # Parámetros de consulta
+            days = int(request.query_params.get('days', 30))
+            periodicity_filter = request.query_params.get('periodicity')
+            state_filter = request.query_params.get('state')
+            
+            # Queryset base
+            queryset = get_optimized_credit_queryset()
+            
+            # Aplicar filtros
+            if periodicity_filter:
+                queryset = queryset.filter(periodicity__name=periodicity_filter)
+            
+            if state_filter:
+                queryset = queryset.filter(state=state_filter)
+            
+            # Analytics por estado
+            analytics_by_state = queryset.values('state').annotate(
+                count=Count('id'),
+                total_amount=Sum('price'),
+                avg_amount=Avg('price'),
+                total_pending=Sum('pending_amount')
+            )
+            
+            # Analytics por periodicidad
+            analytics_by_periodicity = queryset.values(
+                'periodicity__name'
+            ).annotate(
+                count=Count('id'),
+                total_amount=Sum('price'),
+                avg_amount=Avg('price'),
+                overdue_count=Count(
+                    'id',
+                    filter=Q(morosidad_level__in=['mild_default', 'moderate_default', 'severe_default', 'critical_default'])
+                )
+            )
+            
+            # Analytics por subcategoría
+            analytics_by_subcategory = queryset.values(
+                'subcategory__name'
+            ).annotate(
+                count=Count('id'),
+                total_amount=Sum('price'),
+                avg_amount=Avg('price')
+            )
+            
+            # Tendencias temporales
+            date_from = timezone.now() - timedelta(days=days)
+            temporal_analytics = queryset.filter(
+                created_at__gte=date_from
+            ).extra(
+                select={'day': 'date(created_at)'}
+            ).values('day').annotate(
+                count=Count('id'),
+                total_amount=Sum('price')
+            ).order_by('day')
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'analytics_by_state': list(analytics_by_state),
+                    'analytics_by_periodicity': list(analytics_by_periodicity),
+                    'analytics_by_subcategory': list(analytics_by_subcategory),
+                    'temporal_analytics': list(temporal_analytics),
+                    'filters_applied': {
+                        'days': days,
+                        'periodicity': periodicity_filter,
+                        'state': state_filter
+                    }
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class RiskAnalysisAdvancedView(APIView):
+    """Vista para análisis de riesgo"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """Obtener análisis detallado de riesgo"""
+        try:
+            from apps.fintech.models import Credit, Installment
+            
+            # Análisis por nivel de morosidad
+            risk_by_morosidad = Credit.objects.filter(
+                state='pending'
+            ).values('morosidad_level').annotate(
+                count=Count('id'),
+                total_amount=Sum('price'),
+                total_pending=Sum('pending_amount'),
+                avg_delay=Avg('installments__days_overdue')
+            )
+            
+            # Créditos en alto riesgo
+            high_risk_credits = Credit.objects.filter(
+                state='pending',
+                morosidad_level__in=['severe_default', 'critical_default']
+            ).select_related('user', 'subcategory').prefetch_related('installments')[:50]
+            
+            # Análisis de cuotas vencidas
+            overdue_analysis = Installment.objects.filter(
+                status='overdue'
+            ).values('credit__morosidad_level').annotate(
+                count=Count('id'),
+                total_amount=Sum('amount'),
+                avg_days_overdue=Avg('days_overdue')
+            )
+            
+            # Proyección de pérdidas
+            potential_losses = Credit.objects.filter(
+                state='pending',
+                morosidad_level__in=['severe_default', 'critical_default']
+            ).aggregate(
+                total_potential_loss=Sum('pending_amount')
+            )['total_potential_loss'] or 0
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'risk_by_morosidad': list(risk_by_morosidad),
+                    'high_risk_credits_count': high_risk_credits.count(),
+                    'overdue_analysis': list(overdue_analysis),
+                    'potential_losses': str(potential_losses),
+                    'risk_alerts': get_alerts()
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
