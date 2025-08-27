@@ -341,7 +341,7 @@ def get_by_periodicity_metrics():
         
         total_credits = credits.count()
         pending_amount = credits.aggregate(
-            total=Coalesce(Sum('pending_amount'), 0)
+            total=Coalesce(Sum('pending_amount'), 0, output_field=DecimalField())
         )['total'] or 0
         
         overdue_credits = credits.filter(

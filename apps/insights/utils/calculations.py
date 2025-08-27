@@ -202,11 +202,11 @@ def calculate_performance_metrics():
     
     # Montos totales
     total_amount_lent = active_credits.aggregate(
-        total=Coalesce(Sum('price'), 0)
+        total=Coalesce(Sum('price'), 0, output_field=DecimalField())
     )['total'] or 0
     
     total_pending_amount = active_credits.aggregate(
-        total=Coalesce(Sum('pending_amount'), 0)
+        total=Coalesce(Sum('pending_amount'), 0, output_field=DecimalField())
     )['total'] or 0
     
     total_collected = total_amount_lent - total_pending_amount

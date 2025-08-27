@@ -916,7 +916,7 @@ class EnhancedDefaultersInsightsView(APIView):
                 'top_defaulters': [
                     {
                         'user': {
-                            'id': metric.user.id,
+                            'id': str(metric.user.id_user),
                             'username': metric.user.username,
                             'email': metric.user.email
                         },
@@ -1070,7 +1070,7 @@ class DashboardSummaryView(APIView):
                 due_date=timezone.now().date(),
                 status='pending'
             ).aggregate(
-                total=Coalesce(Sum('amount'), 0)
+                total=Coalesce(Sum('amount'), 0, output_field=DecimalField())
             )['total'] or 0
             
             expected_collection_week = Installment.objects.filter(
@@ -1080,7 +1080,7 @@ class DashboardSummaryView(APIView):
                 ],
                 status='pending'
             ).aggregate(
-                total=Coalesce(Sum('amount'), 0)
+                total=Coalesce(Sum('amount'), 0, output_field=DecimalField())
             )['total'] or 0
             
             # Calcular tasa de mora
