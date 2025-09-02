@@ -314,6 +314,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 @method_decorator(csrf_exempt, name='dispatch')
+
 class CreditsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]

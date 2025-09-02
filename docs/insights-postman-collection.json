@@ -1,0 +1,799 @@
+{
+	"info": {
+		"_postman_id": "insights-collection-id",
+		"name": "Insights API Collection",
+		"description": "Colección completa de todas las vistas de la aplicación Insights",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Dashboards Principales",
+			"item": [
+				{
+					"name": "Dashboard Ejecutivo",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/dashboard/executive/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"dashboard",
+								"executive",
+								""
+							]
+						},
+						"description": "Obtener KPIs principales del dashboard ejecutivo (requiere admin)"
+					}
+				},
+				{
+					"name": "Analytics de Créditos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/dashboard/credits/?days=30",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"dashboard",
+								"credits",
+								""
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30",
+									"description": "Número de días para el análisis"
+								}
+							]
+						},
+						"description": "Obtener analytics de créditos con parámetro de días"
+					}
+				},
+				{
+					"name": "Dashboard de Riesgos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/dashboard/risk/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"dashboard",
+								"risk",
+								""
+							]
+						},
+						"description": "Obtener métricas de riesgo (requiere admin)"
+					}
+				},
+				{
+					"name": "Insights de Usuarios",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/dashboard/users/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"dashboard",
+								"users",
+								""
+							]
+						},
+						"description": "Obtener insights de usuarios"
+					}
+				},
+				{
+					"name": "Dashboard Operacional",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/dashboard/operational/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"dashboard",
+								"operational",
+								""
+							]
+						},
+						"description": "Obtener dashboard operacional"
+					}
+				},
+				{
+					"name": "Dashboard de Ingresos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/dashboard/revenue/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"dashboard",
+								"revenue",
+								""
+							]
+						},
+						"description": "Obtener dashboard de ingresos"
+					}
+				}
+			]
+		},
+		{
+			"name": "Analytics Específicos",
+			"item": [
+				{
+					"name": "Vista General del Portafolio",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/portfolio/overview/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"portfolio",
+								"overview",
+								""
+							]
+						},
+						"description": "Obtener vista general del portafolio"
+					}
+				},
+				{
+					"name": "Insights Predictivos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/predictive/insights/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"predictive",
+								"insights",
+								""
+							]
+						},
+						"description": "Obtener insights predictivos"
+					}
+				}
+			]
+		},
+		{
+			"name": "Análisis de Créditos",
+			"item": [
+				{
+					"name": "Análisis de Créditos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/credits/analysis/?start_date=2024-01-01&end_date=2024-12-31",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"credits",
+								"analysis",
+								""
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2024-01-01",
+									"description": "Fecha de inicio (YYYY-MM-DD)"
+								},
+								{
+									"key": "end_date",
+									"value": "2024-12-31",
+									"description": "Fecha de fin (YYYY-MM-DD)"
+								}
+							]
+						},
+						"description": "Análisis de créditos con parámetros de fechas"
+					}
+				},
+				{
+					"name": "Resumen de Análisis de Créditos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/credits/analysis/summary/?start_date=2024-01-01&end_date=2024-12-31",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"credits",
+								"analysis",
+								"summary",
+								""
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2024-01-01",
+									"description": "Fecha de inicio (YYYY-MM-DD)"
+								},
+								{
+									"key": "end_date",
+									"value": "2024-12-31",
+									"description": "Fecha de fin (YYYY-MM-DD)"
+								}
+							]
+						},
+						"description": "Resumen del análisis de créditos"
+					}
+				},
+				{
+					"name": "Análisis de Créditos por Clientes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/credits/analysis/clients/?start_date=2024-01-01&end_date=2024-12-31",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"credits",
+								"analysis",
+								"clients",
+								""
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2024-01-01",
+									"description": "Fecha de inicio (YYYY-MM-DD)"
+								},
+								{
+									"key": "end_date",
+									"value": "2024-12-31",
+									"description": "Fecha de fin (YYYY-MM-DD)"
+								}
+							]
+						},
+						"description": "Análisis de créditos por clientes"
+					}
+				}
+			]
+		},
+		{
+			"name": "Sistema de Control Financiero",
+			"item": [
+				{
+					"name": "Dashboard de Control Financiero",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/financial-control/dashboard/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"financial-control",
+								"dashboard",
+								""
+							]
+						},
+						"description": "Dashboard principal del sistema de control financiero"
+					}
+				},
+				{
+					"name": "Lista de Morosos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/financial-control/defaulters/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"financial-control",
+								"defaulters",
+								""
+							]
+						},
+						"description": "Lista de usuarios morosos"
+					}
+				},
+				{
+					"name": "Insights Mejorados de Morosos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/financial-control/defaulters/enhanced/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"financial-control",
+								"defaulters",
+								"enhanced",
+								""
+							]
+						},
+						"description": "Insights mejorados de usuarios morosos"
+					}
+				},
+				{
+					"name": "Métricas Financieras de Usuario",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/financial-control/metrics/user/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"financial-control",
+								"metrics",
+								"user",
+								""
+							]
+						},
+						"description": "Métricas financieras generales de usuarios"
+					}
+				},
+				{
+					"name": "Métricas Financieras de Usuario Específico",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/financial-control/metrics/user/1/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"financial-control",
+								"metrics",
+								"user",
+								"1",
+								""
+							]
+						},
+						"description": "Métricas financieras de un usuario específico (ID: 1)"
+					}
+				},
+				{
+					"name": "Alertas Financieras",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/financial-control/alerts/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"financial-control",
+								"alerts",
+								""
+							]
+						},
+						"description": "Alertas financieras del sistema"
+					}
+				},
+				{
+					"name": "Reportes de Morosos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/financial-control/reports/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"financial-control",
+								"reports",
+								""
+							]
+						},
+						"description": "Reportes detallados de morosos"
+					}
+				}
+			]
+		},
+		{
+			"name": "API Dashboard Optimizada",
+			"item": [
+				{
+					"name": "Dashboard de Créditos API",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/api/credits/dashboard/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"api",
+								"credits",
+								"dashboard",
+								""
+							]
+						},
+						"description": "Dashboard de créditos optimizado para API"
+					}
+				},
+				{
+					"name": "Cobro Esperado de Cuotas",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/api/installments/expected-collection/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"api",
+								"installments",
+								"expected-collection",
+								""
+							]
+						},
+						"description": "Cobro esperado de cuotas"
+					}
+				},
+				{
+					"name": "Resumen del Dashboard",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/api/dashboard/summary/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"api",
+								"dashboard",
+								"summary",
+								""
+							]
+						},
+						"description": "Resumen general del dashboard"
+					}
+				},
+				{
+					"name": "Analytics Avanzados de Créditos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/api/credits/analytics/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"api",
+								"credits",
+								"analytics",
+								""
+							]
+						},
+						"description": "Analytics avanzados de créditos"
+					}
+				},
+				{
+					"name": "Análisis Avanzado de Riesgos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/api/risk/analysis/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"api",
+								"risk",
+								"analysis",
+								""
+							]
+						},
+						"description": "Análisis avanzado de riesgos"
+					}
+				}
+			]
+		},
+		{
+			"name": "Utilidades y Resúmenes",
+			"item": [
+				{
+					"name": "Resumen de Insights",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/summary/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"summary",
+								""
+							]
+						},
+						"description": "Resumen general de insights"
+					}
+				},
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/health-check/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"health-check",
+								""
+							]
+						},
+						"description": "Verificar el estado de salud de la aplicación insights"
+					}
+				},
+				{
+					"name": "Exportar Datos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/insights/export/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"insights",
+								"export",
+								""
+							]
+						},
+						"description": "Exportar datos de insights"
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "tu_jwt_token_aqui",
+			"type": "string"
+		}
+	]
+}

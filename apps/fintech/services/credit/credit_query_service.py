@@ -23,7 +23,7 @@ class CreditQueryService:
         
         elif hasattr(user, 'seller_profile'):
             # Vendedor: Ve solo créditos que vendió (prioridad sobre is_staff)
-            return Credit.objects.filter(seller__user=user)
+            return Credit.objects.filter(seller__user__id=user.id)
         
         elif user.is_staff:
             # Admin (sin seller_profile): Ve TODO

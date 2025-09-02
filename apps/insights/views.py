@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Sum, Count, Avg
 from decimal import Decimal
 
+from apps.fintech.models import User
 from apps.insights.services.analytics_service import AnalyticsService
 from apps.insights.services.dashboard_service import DashboardService
 from apps.insights.services.credit_analysis_service import CreditAnalysisService
