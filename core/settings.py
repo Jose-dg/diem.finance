@@ -303,11 +303,14 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': False,
+    # Token de acceso válido por 8 horas (tiempo de trabajo típico)
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
+    # Token de refresh válido por 7 días (una semana)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    # Rotar refresh tokens para mayor seguridad
+    'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'UPDATE_LAST_LOGIN': False,
+    'UPDATE_LAST_LOGIN': True,  # Actualizar último login para auditoría
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'VERIFYING_KEY': None,
@@ -324,8 +327,9 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
     'JTI_CLAIM': 'jti',
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
-    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=50),
-    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+    # Sliding tokens también actualizados
+    'SLIDING_TOKEN_LIFETIME': timedelta(hours=7),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=7),
 }
 
 
