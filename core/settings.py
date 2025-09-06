@@ -3,6 +3,7 @@ from datetime import timedelta
 import os
 import environ
 from celery.schedules import crontab
+import logging
 
 env = environ.Env()
 environ.Env.read_env()
@@ -16,13 +17,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = os.environ.get('SECRET_KEY')
-SECRET_KEY = 'django-insecure-s%=f4!f-89o#gm3e%t2ss4$81xyk*e*%a#*)6#xi)o%_^rxo)x'
+SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env.bool('DEBUG')
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
@@ -51,25 +51,13 @@ THIRD_PARTY_APPS = [
 
 PROJECT_APPS = [
     'apps.fintech',
-    'apps.dashboard'
-]
-
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'corsheaders',
-    'apps.fintech',
     'apps.dashboard',
-
     'apps.revenue',
     'apps.forecasting',
-    'apps.insights',  # Nueva aplicación
+    'apps.insights'
 ]
+
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -103,17 +91,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
 DATABASES = {
     "default": env.db("DATABASE_URL"),
 }
@@ -131,7 +108,7 @@ DATABASES["default"]["ATOMIC_REQUESTS"] = True
 #     }
 # }
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS')
 
 CORS_ORIGIN_WHITELIST = [
     'http://localhost:3000',
@@ -153,13 +130,19 @@ CSRF_TRUSTED_ORIGINS = [
     'https://finance-app-one-navy.vercel.app'
 ]
 
+# Configuración de autenticación personalizada
+AUTHENTICATION_BACKENDS = [
+    'apps.fintech.backends.FintechAuthenticationBackend',
+    'apps.fintech.backends.ClientAuthenticationBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 ]
-
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -179,13 +162,12 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
 
-# TIME_ZONE = 'UTC'
+
 TIME_ZONE = 'America/Bogota'
 
 USE_I18N = False  
@@ -212,10 +194,6 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'apps/fintech/static'),
 ]
 
-# STATICFILES_DIRS = [
-#     os.path.join(BASE_DIR, 'build/static')
-# ]
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -226,7 +204,7 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',
-        'TIMEOUT': 3600,  # 1 hora
+        'TIMEOUT': 3600,
         'OPTIONS': {
             'MAX_ENTRIES': 1000,
         }
@@ -234,11 +212,9 @@ CACHES = {
 }
 
 # Celery Configuration
-# Configuración que usa REDIS_URL si está disponible, sino usa localhost
 REDIS_URL = os.environ.get('REDIS_URL')
 
 # Debug: Imprimir la configuración de Redis para verificar
-import logging
 logger = logging.getLogger(__name__)
 logger.info(f"REDIS_URL configurado: {REDIS_URL}")
 logger.info(f"REDIS_URL desde env: {os.environ.get('REDIS_URL', 'NO_ENCONTRADO')}")
@@ -327,11 +303,6 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
     'JTI_CLAIM': 'jti',
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
-    # Sliding tokens también actualizados
     'SLIDING_TOKEN_LIFETIME': timedelta(hours=7),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=7),
 }
-
-
-
-# Revisarla forma en como se buscan las personas en el sistema desde transactions para hacer lo mismo en credits

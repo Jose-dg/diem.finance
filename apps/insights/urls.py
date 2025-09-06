@@ -20,6 +20,7 @@ urlpatterns = [
     path('credits/analysis/', views.CreditAnalysisView.as_view(), name='credit_analysis'),
     path('credits/analysis/summary/', views.CreditAnalysisSummaryView.as_view(), name='credit_analysis_summary'),
     path('credits/analysis/clients/', views.CreditAnalysisClientsView.as_view(), name='credit_analysis_clients'),
+    path('credits/analysis/clients-without-payments/', views.ClientsWithoutPaymentsView.as_view(), name='clients_without_payments'),
     
     # Resumen y utilidades (independientes de modelos insights)
     path('summary/', views.InsightsSummaryView.as_view(), name='insights_summary'),

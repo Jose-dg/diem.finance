@@ -275,6 +275,129 @@ class CreditAnalysisService:
             return {}
     
     @staticmethod
+    def get_clients_without_payments(start_date, end_date, limit=None):
+        """
+        Obtiene lista específica de clientes que no han realizado ningún pago en el período
+        """
+        try:
+            # Obtener créditos del período
+            creditos_periodo = Credit.objects.filter(
+                created_at__date__range=[start_date, end_date]
+            ).select_related('user', 'subcategory', 'currency')
+            
+            # Filtrar solo clientes sin pagos (total_abonos = 0)
+            clientes_sin_pagos = creditos_periodo.filter(
+                total_abonos=0.00
+            ).values(
+                'user__id',
+                'user__username',
+                'user__first_name',
+                'user__last_name',
+                'user__email',
+                'user__phone'
+            ).annotate(
+                total_credits=Count('id'),
+                total_requested=Sum('price'),
+                total_pending=Sum('pending_amount'),
+                first_credit_date=Min('created_at'),
+                last_credit_date=Max('created_at'),
+                avg_credit_amount=Avg('price'),
+                max_credit_amount=Max('price'),
+                min_credit_amount=Min('price'),
+                # Información de cuotas
+                total_installments=Count('installments'),
+                overdue_installments=Count('installments', filter=Q(installments__status='overdue')),
+                # Información de subcategorías
+                subcategories=Count('subcategory', distinct=True)
+            ).order_by('-total_requested')
+            
+            # Aplicar límite si se especifica
+            if limit:
+                clientes_sin_pagos = clientes_sin_pagos[:limit]
+            
+            # Procesar cada cliente para agregar información adicional
+            clientes_procesados = []
+            for cliente in clientes_sin_pagos:
+                # Obtener nombre completo
+                nombre_completo = f"{cliente['user__first_name']} {cliente['user__last_name']}".strip()
+                if not nombre_completo:
+                    nombre_completo = cliente['user__username']
+                
+                # Obtener créditos específicos del cliente
+                creditos_cliente = creditos_periodo.filter(
+                    user_id=cliente['user__id'],
+                    total_abonos=0.00
+                )
+                
+                # Información de cuotas vencidas
+                cuotas_vencidas = 0
+                dias_mora_promedio = 0
+                if creditos_cliente.exists():
+                    hoy = timezone.now().date()
+                    total_dias_mora = 0
+                    creditos_con_cuotas_vencidas = 0
+                    
+                    for credito in creditos_cliente:
+                        cuotas_vencidas_credito = credito.installments.filter(
+                            status='overdue'
+                        ).count()
+                        cuotas_vencidas += cuotas_vencidas_credito
+                        
+                        if credito.first_date_payment:
+                            dias_mora = (hoy - credito.first_date_payment).days
+                            if dias_mora > 0:
+                                total_dias_mora += dias_mora
+                                creditos_con_cuotas_vencidas += 1
+                    
+                    if creditos_con_cuotas_vencidas > 0:
+                        dias_mora_promedio = total_dias_mora / creditos_con_cuotas_vencidas
+                
+                # Obtener información de subcategorías
+                subcategorias = creditos_cliente.values(
+                    'subcategory__name'
+                ).annotate(
+                    count=Count('id'),
+                    total_amount=Sum('price')
+                ).order_by('-total_amount')
+                
+                cliente_procesado = {
+                    'client_id': cliente['user__id'],
+                    'username': cliente['user__username'],
+                    'full_name': nombre_completo,
+                    'email': cliente['user__email'],
+                    'phone': cliente['user__phone'],
+                    'total_credits': cliente['total_credits'],
+                    'total_requested': float(cliente['total_requested']),
+                    'total_pending': float(cliente['total_pending']),
+                    'avg_credit_amount': float(cliente['avg_credit_amount']),
+                    'max_credit_amount': float(cliente['max_credit_amount']),
+                    'min_credit_amount': float(cliente['min_credit_amount']),
+                    'first_credit_date': cliente['first_credit_date'],
+                    'last_credit_date': cliente['last_credit_date'],
+                    'total_installments': cliente['total_installments'],
+                    'overdue_installments': cliente['overdue_installments'],
+                    'overdue_installments_count': cuotas_vencidas,
+                    'avg_days_overdue': round(dias_mora_promedio, 1),
+                    'subcategories_count': cliente['subcategories'],
+                    'subcategories_detail': list(subcategorias),
+                    'risk_level': CreditAnalysisService._calculate_risk_level(
+                        0,  # Sin pagos = 0% de pago
+                        0,  # Sin créditos en mora específicamente
+                        dias_mora_promedio
+                    ),
+                    'payment_status': 'NO_PAYMENTS',
+                    'days_since_first_credit': (timezone.now().date() - cliente['first_credit_date'].date()).days if cliente['first_credit_date'] else 0
+                }
+                
+                clientes_procesados.append(cliente_procesado)
+            
+            return clientes_procesados
+            
+        except Exception as e:
+            logger.error(f"Error getting clients without payments: {e}")
+            return []
+
+    @staticmethod
     def get_default_analysis(start_date, end_date):
         """
         Análisis de morosidad y créditos en default

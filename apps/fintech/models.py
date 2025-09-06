@@ -1,7 +1,4 @@
 from django.contrib.auth.models import AbstractUser, Group, Permission
-from django.db import models
-from django.contrib.auth import get_user_model  
-from django.db import transaction as db_transaction
 from django.db import models, transaction as db_transaction
 from django.utils import timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -71,7 +68,7 @@ class Label(models.Model):
         return f"{self.name}" 
 
 class Address(models.Model):
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='addresses')
+    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='addresses')
     address_type = models.CharField(max_length=50, choices=[('billing', 'Billing'), ('shipping', 'Shipping')])
     address = models.CharField(max_length=255)
     city = models.CharField(max_length=100)
@@ -139,7 +136,7 @@ class Account(models.Model):
 class Periodicity(models.Model):
 
     name = models.CharField(max_length=50)
-    days = models.IntegerField()  # Número de días de la periodicidad
+    days = models.IntegerField()
 
     def __str__(self):
         return f"{self.name}"
@@ -156,6 +153,7 @@ class AccountMethodAmount(models.Model):
     def __str__(self):
         return f"Payment method {self.payment_method.name} - Amount Paid: {self.amount_paid}"
 
+# El modelo Role es el que se encarga de definir los roles de los usuarios en el sistema y esta haciendo lo mismo que el modelo Seller
 class Role(models.Model):
     name = models.CharField(max_length=100, unique=True)
     is_staff_role = models.BooleanField(default=False)  
@@ -165,7 +163,7 @@ class Role(models.Model):
 
 class Seller(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='sellers')
-    user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE, related_name='seller_profile')
+    user = models.OneToOneField('User', on_delete=models.CASCADE, related_name='seller_profile')
     total_sales = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     commissions = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     returns = models.IntegerField(default=0)
@@ -207,7 +205,7 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
-
+# A credit falta diferenica como se calcula intereses si por interes simple o por interes compuesto
 class Credit(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
@@ -222,7 +220,7 @@ class Credit(models.Model):
     # Custom manager
     objects = CreditManager()
 
-    registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='credits_registered')
+    registered_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='credits_registered')
     seller = models.ForeignKey(Seller, on_delete=models.SET_NULL, null=True, blank=True, related_name='credits_made') 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credits')
 
@@ -537,8 +535,8 @@ class Expense(models.Model):
     subcategory = models.ForeignKey(SubCategory, on_delete=models.SET_NULL, null=True, related_name='expenses')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='expenses')
-    registered_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, related_name='expenses')
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='expense_made_by')
+    registered_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='expenses')
+    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='expense_made_by')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True) 
 
@@ -574,6 +572,7 @@ class CreditAdjustment(models.Model):
         signo = '+' if self.type and self.type.is_positive else '-'
         return f"{self.type.name if self.type else 'Tipo desconocido'} {signo}${self.amount} al crédito {self.credit_id or 'sin asignar'} ({self.added_on})"
 
+# El modelo Installment es el que se encarga de manejar las cuotas de los créditos y esta mal diseñado
 class Installment(models.Model):
     # Custom manager
     objects = InstallmentManager()

@@ -544,6 +544,132 @@ class CreditAnalysisClientsView(APIView):
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+class ClientsWithoutPaymentsView(APIView):
+    """Vista específica para obtener lista de clientes sin pagos en un período"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """
+        Obtener lista específica de clientes que no han realizado ningún pago en el período
+        
+        Parámetros:
+        - start_date: Fecha de inicio (YYYY-MM-DD)
+        - end_date: Fecha de fin (YYYY-MM-DD)
+        - limit: Límite de clientes (opcional, default: 100)
+        - sort_by: Campo para ordenar (total_requested, total_pending, days_since_first_credit, etc.)
+        - include_summary: Incluir resumen estadístico (true/false, default: true)
+        """
+        try:
+            # Validar y parsear fechas
+            start_date_str = request.query_params.get('start_date')
+            end_date_str = request.query_params.get('end_date')
+            
+            if not start_date_str or not end_date_str:
+                return Response({
+                    'success': False,
+                    'error': 'start_date y end_date son parámetros requeridos (formato: YYYY-MM-DD)'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({
+                    'success': False,
+                    'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validar que start_date <= end_date
+            if start_date > end_date:
+                return Response({
+                    'success': False,
+                    'error': 'start_date debe ser menor o igual a end_date'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener parámetros opcionales
+            limit = request.query_params.get('limit', 100)
+            try:
+                limit = int(limit)
+                if limit <= 0:
+                    raise ValueError("Limit debe ser positivo")
+                # Limitar a máximo 500 para evitar sobrecarga
+                limit = min(limit, 500)
+            except ValueError:
+                return Response({
+                    'success': False,
+                    'error': 'limit debe ser un número entero positivo'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            include_summary = request.query_params.get('include_summary', 'true').lower() == 'true'
+            
+            # Obtener lista de clientes sin pagos
+            clients_without_payments = CreditAnalysisService.get_clients_without_payments(
+                start_date, end_date, limit
+            )
+            
+            # Ordenar si se especifica
+            sort_by = request.query_params.get('sort_by')
+            if sort_by and clients_without_payments:
+                valid_sort_fields = [
+                    'total_credits', 'total_requested', 'total_pending', 
+                    'days_since_first_credit', 'avg_days_overdue', 'overdue_installments_count'
+                ]
+                if sort_by in valid_sort_fields:
+                    reverse = sort_by in ['total_requested', 'total_pending', 'days_since_first_credit', 'avg_days_overdue', 'overdue_installments_count']
+                    clients_without_payments.sort(key=lambda x: x[sort_by], reverse=reverse)
+            
+            # Preparar respuesta
+            response_data = {
+                'clients': clients_without_payments,
+                'total_clients': len(clients_without_payments)
+            }
+            
+            # Agregar resumen si se solicita
+            if include_summary and clients_without_payments:
+                total_requested = sum(client['total_requested'] for client in clients_without_payments)
+                total_pending = sum(client['total_pending'] for client in clients_without_payments)
+                total_credits = sum(client['total_credits'] for client in clients_without_payments)
+                avg_days_overdue = sum(client['avg_days_overdue'] for client in clients_without_payments) / len(clients_without_payments)
+                
+                # Distribución por nivel de riesgo
+                risk_distribution = {}
+                for client in clients_without_payments:
+                    risk = client['risk_level']
+                    if risk not in risk_distribution:
+                        risk_distribution[risk] = 0
+                    risk_distribution[risk] += 1
+                
+                response_data['summary'] = {
+                    'total_clients_without_payments': len(clients_without_payments),
+                    'total_credits': total_credits,
+                    'total_requested_amount': total_requested,
+                    'total_pending_amount': total_pending,
+                    'average_days_overdue': round(avg_days_overdue, 1),
+                    'risk_distribution': risk_distribution,
+                    'period': {
+                        'start_date': start_date_str,
+                        'end_date': end_date_str
+                    }
+                }
+            
+            return Response({
+                'success': True,
+                'data': response_data,
+                'parameters': {
+                    'start_date': start_date_str,
+                    'end_date': end_date_str,
+                    'limit': limit,
+                    'sort_by': sort_by,
+                    'include_summary': include_summary
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class FinancialControlDashboardView(APIView):
     """Vista para dashboard de control financiero"""
     permission_classes = [IsAuthenticated, IsAdminUser]
