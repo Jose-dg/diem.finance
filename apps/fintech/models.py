@@ -734,6 +734,31 @@ class CreditAdjustment(models.Model):
         signo = '+' if self.type and self.type.is_positive else '-'
         return f"{self.type.name if self.type else 'Tipo desconocido'} {signo}${self.amount} al crédito {self.credit_id or 'sin asignar'} ({self.added_on})"
 
+# TODO: PENDIENTE - Rediseñar modelo Installment
+# El modelo Installment actual está mal diseñado y necesita refactoring completo
+# PROBLEMAS IDENTIFICADOS:
+# 1. Demasiados campos redundantes y complejos
+# 2. Lógica de negocio mezclada en el modelo
+# 3. Propiedades calculadas costosas
+# 4. Falta de índices para performance
+# 5. Estados confusos y duplicados
+# 
+# SOLUCIÓN PROPUESTA:
+# - Simplificar campos a solo los esenciales
+# - Mover lógica compleja a servicios
+# - Agregar índices para consultas frecuentes
+# - Unificar estados de cuotas
+# - Implementar validaciones en save()
+#
+# SERVICIOS CREADOS PARA ESTO:
+# - apps/fintech/services/installment/installment_service.py
+# 
+# CUANDO SE IMPLEMENTE:
+# 1. Crear migración de datos para preservar información existente
+# 2. Actualizar todas las referencias al modelo
+# 3. Migrar lógica de negocio a servicios
+# 4. Agregar tests para el nuevo diseño
+
 # El modelo Installment es el que se encarga de manejar las cuotas de los créditos y esta mal diseñado
 class Installment(models.Model):
     # Custom manager
