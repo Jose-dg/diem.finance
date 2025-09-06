@@ -1,9 +1,9 @@
 """
 Helpers para el dashboard de insights
 """
-from django.db.models import Q, Count, Sum, Avg, F, ExpressionWrapper, DecimalField
+from django.db.models import Q, Count, Sum, Avg, F, ExpressionWrapper, DecimalField, Value
 from django.utils import timezone
-from django.db.models.functions import Coalesce, ExtractDay
+from django.db.models.functions import Coalesce, ExtractDay, Concat
 from decimal import Decimal
 from datetime import timedelta
 import math
@@ -16,13 +16,20 @@ def get_optimized_credit_queryset():
         'user',
         'user__document',
         'user__phone_1',
+        'user__country',
+        'user__city',
         'currency',
         'subcategory',
+        'subcategory__category',
         'periodicity',
         'seller__user',
+        'seller__role',
         'payment'
     ).prefetch_related(
-        'installments'
+        'installments',
+        'adjustments',
+        'earnings_detail',
+        'earnings_detail__adjustments'
     ).annotate(
         paid_installments_count=Count(
             'installments', 
@@ -32,7 +39,24 @@ def get_optimized_credit_queryset():
             'installments', 
             filter=Q(installments__status='overdue')
         ),
-        total_installments_count=Count('installments')
+        total_installments_count=Count('installments'),
+        # Nuevas anotaciones optimizadas
+        total_paid_amount=Sum(
+            'installments__amount_paid',
+            filter=Q(installments__status='paid')
+        ),
+        total_overdue_amount=Sum(
+            'installments__remaining_amount',
+            filter=Q(installments__status='overdue')
+        ),
+        avg_installment_amount=Avg('installments__amount'),
+        max_days_overdue=Coalesce(
+            ExpressionWrapper(
+                ExtractDay(timezone.now() - F('installments__due_date')),
+                output_field=DecimalField()
+            ),
+            0
+        )
     ).order_by('-created_at')
 
 def get_optimized_installment_queryset():
@@ -42,9 +66,14 @@ def get_optimized_installment_queryset():
     return Installment.objects.select_related(
         'credit',
         'credit__user',
+        'credit__user__document',
+        'credit__user__country',
         'credit__currency',
         'credit__subcategory',
-        'credit__periodicity'
+        'credit__subcategory__category',
+        'credit__periodicity',
+        'credit__seller__user',
+        'credit__payment'
     ).annotate(
         days_until_due=ExpressionWrapper(
             F('due_date') - timezone.now().date(),
@@ -53,6 +82,16 @@ def get_optimized_installment_queryset():
         is_overdue=ExpressionWrapper(
             Q(due_date__lt=timezone.now().date()) & Q(status='pending'),
             output_field=DecimalField()
+        ),
+        # Nuevas anotaciones optimizadas
+        credit_total_amount=F('credit__price'),
+        credit_pending_amount=F('credit__pending_amount'),
+        credit_morosidad_level=F('credit__morosidad_level'),
+        user_username=F('credit__user__username'),
+        user_full_name=Concat(
+            F('credit__user__first_name'),
+            Value(' '),
+            F('credit__user__last_name')
         )
     ).order_by('due_date')
 
@@ -86,6 +125,84 @@ def get_payment_method_name(credit):
     if credit.payment:
         return credit.payment.name
     return "No especificado"
+
+def get_optimized_revenue_queryset():
+    """Retorna un queryset optimizado para métricas de revenue"""
+    from apps.revenue.models import CreditEarnings, EarningsMetrics
+    
+    return CreditEarnings.objects.select_related(
+        'credit',
+        'credit__user',
+        'credit__currency',
+        'credit__subcategory'
+    ).prefetch_related(
+        'adjustments'
+    ).annotate(
+        # Cálculos optimizados de revenue
+        net_earnings=F('theoretical_earnings') - F('realized_earnings'),
+        earnings_efficiency=ExpressionWrapper(
+            (F('realized_earnings') / F('theoretical_earnings')) * 100,
+            output_field=DecimalField()
+        ),
+        total_adjustments=Sum('adjustments__amount'),
+        credit_amount=F('credit__price'),
+        credit_cost=F('credit__cost')
+    ).order_by('-updated_at')
+
+def get_optimized_forecasting_queryset():
+    """Retorna un queryset optimizado para predicciones"""
+    from apps.forecasting.models import CreditPrediction, RiskAssessment
+    
+    return CreditPrediction.objects.select_related(
+        'credit',
+        'credit__user',
+        'credit__currency'
+    ).annotate(
+        # Cálculos optimizados de predicciones
+        days_until_expiry=ExpressionWrapper(
+            F('expires_at') - timezone.now(),
+            output_field=DecimalField()
+        ),
+        is_high_confidence=ExpressionWrapper(
+            Q(confidence_percentage__gte=80),
+            output_field=DecimalField()
+        ),
+        credit_risk_level=F('credit__morosidad_level'),
+        credit_amount=F('credit__price')
+    ).filter(
+        expires_at__gt=timezone.now()
+    ).order_by('-confidence_percentage', '-created_at')
+
+def get_optimized_risk_assessment_queryset():
+    """Retorna un queryset optimizado para evaluaciones de riesgo"""
+    from apps.forecasting.models import RiskAssessment
+    
+    return RiskAssessment.objects.select_related(
+        'credit',
+        'credit__user',
+        'user',
+        'assessed_by'
+    ).annotate(
+        # Cálculos optimizados de riesgo
+        risk_score_normalized=ExpressionWrapper(
+            F('risk_score') / 100,
+            output_field=DecimalField()
+        ),
+        expected_loss_calculated=ExpressionWrapper(
+            (F('probability') / 100) * F('potential_impact'),
+            output_field=DecimalField()
+        ),
+        days_until_expiry=ExpressionWrapper(
+            F('valid_until') - timezone.now(),
+            output_field=DecimalField()
+        ),
+        is_critical_risk=ExpressionWrapper(
+            Q(risk_level='critical') | Q(risk_score__gte=80),
+            output_field=DecimalField()
+        )
+    ).filter(
+        valid_until__gt=timezone.now()
+    ).order_by('-risk_score', '-assessment_date')
 
 def get_seller_info(credit):
     """Obtiene información del vendedor"""

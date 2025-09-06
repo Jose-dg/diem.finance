@@ -28,12 +28,24 @@ def adjust_credit_on_update(sender, instance, **kwargs):
             pass
 
 @receiver(post_save, sender=AccountMethodAmount)
-def update_credit_on_account_method_change(sender, instance, **kwargs):
+def update_credit_on_account_method_change(sender, instance, created, **kwargs):
     """
     Solo actualizamos el crédito si la transacción es de tipo 'income'
     """
     if instance.transaction.transaction_type == 'income' and instance.credit:
-        instance.credit.update_total_abonos(instance.amount_paid)
+        if created:
+            # Solo para nuevos registros, sumar el monto completo
+            instance.credit.update_total_abonos(instance.amount_paid)
+        else:
+            # Para actualizaciones, calcular la diferencia
+            try:
+                previous = AccountMethodAmount.objects.get(pk=instance.pk)
+                difference = instance.amount_paid - previous.amount_paid
+                if difference != 0:
+                    instance.credit.update_total_abonos(difference)
+            except AccountMethodAmount.DoesNotExist:
+                # Si no existe el registro anterior, sumar el monto completo
+                instance.credit.update_total_abonos(instance.amount_paid)
         
         # Actualizar estado de las cuotas del crédito
         try:

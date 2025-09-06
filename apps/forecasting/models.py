@@ -137,6 +137,38 @@ class CreditPrediction(models.Model):
         """Verifica si la predicción ha expirado"""
         from django.utils import timezone
         return timezone.now() > self.expires_at
+    
+    @property
+    def days_until_expiry(self):
+        """Días hasta que expire la predicción"""
+        from django.utils import timezone
+        delta = self.expires_at - timezone.now()
+        return delta.days if delta.days > 0 else 0
+    
+    @property
+    def is_high_confidence(self):
+        """Indica si la predicción tiene alta confianza"""
+        return self.confidence_percentage >= 80
+    
+    @property
+    def confidence_level_numeric(self):
+        """Nivel de confianza como número (0-100)"""
+        return float(self.confidence_percentage)
+    
+    @property
+    def prediction_accuracy_score(self):
+        """Puntuación de precisión de la predicción (requiere validación posterior)"""
+        # Esta property se puede implementar cuando se valide la predicción
+        # Por ahora retorna el nivel de confianza
+        return self.confidence_percentage
+    
+    @property
+    def is_critical_prediction(self):
+        """Indica si es una predicción crítica (alta confianza + alto riesgo)"""
+        return (self.is_high_confidence and 
+                self.prediction_type == 'default_risk' and 
+                self.risk_score and 
+                self.risk_score >= 70)
 
 class SeasonalPattern(models.Model):
     """
@@ -364,4 +396,48 @@ class RiskAssessment(models.Model):
     @property
     def expected_loss(self):
         """Calcula la pérdida esperada (Probabilidad × Impacto)"""
-        return (self.probability / 100) * self.potential_impact 
+        return (self.probability / 100) * self.potential_impact
+    
+    @property
+    def days_until_expiry(self):
+        """Días hasta que expire la evaluación"""
+        from django.utils import timezone
+        delta = self.valid_until - timezone.now()
+        return delta.days if delta.days > 0 else 0
+    
+    @property
+    def is_critical_risk(self):
+        """Indica si es un riesgo crítico"""
+        return self.risk_level == 'critical' or self.risk_score >= 80
+    
+    @property
+    def risk_score_normalized(self):
+        """Puntuación de riesgo normalizada (0-1)"""
+        return float(self.risk_score) / 100
+    
+    @property
+    def probability_normalized(self):
+        """Probabilidad normalizada (0-1)"""
+        return float(self.probability) / 100
+    
+    @property
+    def risk_impact_score(self):
+        """Puntuación combinada de riesgo e impacto"""
+        return self.risk_score_normalized * self.probability_normalized
+    
+    @property
+    def mitigation_priority(self):
+        """Prioridad de mitigación basada en riesgo e impacto"""
+        if self.is_critical_risk:
+            return 'urgent'
+        elif self.risk_score >= 60:
+            return 'high'
+        elif self.risk_score >= 40:
+            return 'medium'
+        else:
+            return 'low'
+    
+    @property
+    def has_mitigation_actions(self):
+        """Indica si tiene acciones de mitigación definidas"""
+        return bool(self.mitigation_actions and len(self.mitigation_actions) > 0) 

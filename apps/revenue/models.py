@@ -71,6 +71,33 @@ class CreditEarnings(models.Model):
         if self.theoretical_earnings > 0:
             return (self.realized_earnings / self.theoretical_earnings) * 100
         return Decimal('0.00')
+    
+    @property
+    def net_earnings_after_adjustments(self):
+        """Ganancia neta después de ajustes"""
+        total_adjustments = self.adjustments.aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+        return self.realized_earnings + total_adjustments
+    
+    @property
+    def earnings_efficiency_score(self):
+        """Puntuación de eficiencia de ganancias (0-100)"""
+        if self.theoretical_earnings > 0:
+            efficiency = (self.realized_earnings / self.theoretical_earnings) * 100
+            return min(100, max(0, efficiency))
+        return Decimal('0.00')
+    
+    @property
+    def is_high_performing(self):
+        """Indica si el crédito tiene alto rendimiento"""
+        return self.realization_percentage >= 80
+    
+    @property
+    def days_since_last_update(self):
+        """Días desde la última actualización"""
+        from django.utils import timezone
+        return (timezone.now() - self.updated_at).days
 
     def clean(self):
         if self.realized_earnings > self.theoretical_earnings:
@@ -225,6 +252,37 @@ class EarningsMetrics(models.Model):
     def pending_earnings(self):
         """Ganancias pendientes en el período"""
         return self.total_theoretical_earnings - self.total_realized_earnings
+    
+    @property
+    def period_duration_days(self):
+        """Duración del período en días"""
+        return (self.period_end - self.period_start).days
+    
+    @property
+    def avg_earnings_per_credit(self):
+        """Ganancia promedio por crédito"""
+        if self.credits_count > 0:
+            return self.total_theoretical_earnings / self.credits_count
+        return Decimal('0.00')
+    
+    @property
+    def earnings_growth_rate(self):
+        """Tasa de crecimiento de ganancias (requiere comparación con período anterior)"""
+        # Esta property requeriría datos del período anterior
+        # Por ahora retorna 0, pero se puede implementar con lógica más compleja
+        return Decimal('0.00')
+    
+    @property
+    def is_positive_period(self):
+        """Indica si el período tuvo ganancias positivas"""
+        return self.total_realized_earnings > 0
+    
+    @property
+    def realization_efficiency(self):
+        """Eficiencia de realización de ganancias"""
+        if self.total_theoretical_earnings > 0:
+            return (self.total_realized_earnings / self.total_theoretical_earnings) * 100
+        return Decimal('0.00')
 
     def clean(self):
         if self.period_end <= self.period_start:
