@@ -42,5 +42,10 @@ urlpatterns = [
     path('api/dashboard/summary/', views.DashboardSummaryView.as_view(), name='dashboard_summary'),
     path('api/credits/analytics/', views.CreditAnalyticsAdvancedView.as_view(), name='credits_analytics_advanced'),
     path('api/risk/analysis/', views.RiskAnalysisAdvancedView.as_view(), name='risk_analysis_advanced'),
+    
+    # NUEVAS VISTAS PARA INSIGHTS POR CRÉDITO
+    path('credits/insights/<str:credit_id>/', views.CreditInsightsView.as_view(), name='credit_insights'),
+    path('credits/analysis/comparative/', views.CreditAnalysisView.as_view(), name='credit_analysis_comparative'),
+    path('credits/performance/', views.CreditPerformanceView.as_view(), name='credit_performance'),
 ]
 

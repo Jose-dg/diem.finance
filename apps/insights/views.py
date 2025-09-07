@@ -1408,3 +1408,342 @@ class RiskAnalysisAdvancedView(APIView):
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# =============================================================================
+# NUEVAS VISTAS PARA INSIGHTS POR CRÉDITO
+# =============================================================================
+
+class CreditInsightsView(APIView):
+    """Vista para insights detallados de un crédito específico"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, credit_id):
+        """
+        Obtener insights detallados de un crédito específico
+        
+        Args:
+            credit_id: UUID del crédito
+            
+        Returns:
+            Insights detallados del crédito incluyendo:
+            - Información básica
+            - Análisis de pagos
+            - Evaluación de riesgo
+            - Métricas de rendimiento
+            - Desglose de cuotas
+            - Análisis temporal
+            - Análisis comparativo
+            - Recomendaciones
+        """
+        try:
+            from apps.insights.services.credit_insights_service import CreditInsightsService
+            from apps.insights.serializers.credit_insights_serializers import CreditInsightsResponseSerializer
+            
+            # Validar que el usuario tenga acceso al crédito
+            from apps.fintech.models import Credit
+            try:
+                credit = Credit.objects.get(uid=credit_id)
+                
+                # Verificar permisos: el usuario debe ser el dueño del crédito o admin
+                if not request.user.is_staff and credit.user != request.user:
+                    return Response({
+                        'success': False,
+                        'error': 'No tienes permisos para acceder a este crédito'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                    
+            except Credit.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': 'Crédito no encontrado'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Obtener insights detallados
+            insights_data = CreditInsightsService.get_credit_detailed_insights(credit_id)
+            
+            if not insights_data:
+                return Response({
+                    'success': False,
+                    'error': 'No se pudieron generar los insights del crédito'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Validar respuesta con serializer
+            response_data = {
+                'success': True,
+                'data': insights_data
+            }
+            
+            serializer = CreditInsightsResponseSerializer(data=response_data)
+            if serializer.is_valid():
+                return Response(serializer.validated_data, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Error en la validación de datos',
+                    'details': serializer.errors
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            logger.error(f"Error in CreditInsightsView: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CreditAnalysisView(APIView):
+    """Vista para análisis comparativo de múltiples créditos"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """
+        Obtener análisis comparativo de créditos con filtros opcionales
+        
+        Parámetros de consulta:
+        - start_date: Fecha de inicio (YYYY-MM-DD)
+        - end_date: Fecha de fin (YYYY-MM-DD)
+        - subcategory_id: ID de la subcategoría
+        - user_id: ID del usuario
+        - limit: Límite de resultados (opcional)
+        
+        Returns:
+            Análisis comparativo incluyendo:
+            - Resumen general
+            - Análisis por categoría
+            - Análisis por estado
+            - Análisis por nivel de morosidad
+            - Top créditos por monto
+        """
+        try:
+            from apps.insights.services.credit_insights_service import CreditInsightsService
+            from apps.insights.serializers.credit_insights_serializers import CreditAnalysisResponseSerializer
+            from datetime import datetime
+            
+            # Preparar filtros
+            filters = {}
+            
+            # Filtro por fechas
+            start_date_str = request.query_params.get('start_date')
+            end_date_str = request.query_params.get('end_date')
+            
+            if start_date_str:
+                try:
+                    filters['start_date'] = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'Formato de fecha de inicio inválido. Use YYYY-MM-DD'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if end_date_str:
+                try:
+                    filters['end_date'] = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'Formato de fecha de fin inválido. Use YYYY-MM-DD'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validar que start_date <= end_date
+            if filters.get('start_date') and filters.get('end_date'):
+                if filters['start_date'] > filters['end_date']:
+                    return Response({
+                        'success': False,
+                        'error': 'La fecha de inicio debe ser menor o igual a la fecha de fin'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Filtro por subcategoría
+            subcategory_id = request.query_params.get('subcategory_id')
+            if subcategory_id:
+                try:
+                    filters['subcategory_id'] = int(subcategory_id)
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'ID de subcategoría inválido'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Filtro por usuario
+            user_id = request.query_params.get('user_id')
+            if user_id:
+                try:
+                    filters['user_id'] = int(user_id)
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'ID de usuario inválido'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener análisis comparativo
+            analysis_data = CreditInsightsService.get_credits_comparative_analysis(filters)
+            
+            if not analysis_data:
+                return Response({
+                    'success': False,
+                    'error': 'No se pudieron generar el análisis comparativo'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Validar respuesta con serializer
+            response_data = {
+                'success': True,
+                'data': analysis_data
+            }
+            
+            serializer = CreditAnalysisResponseSerializer(data=response_data)
+            if serializer.is_valid():
+                return Response(serializer.validated_data, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Error en la validación de datos',
+                    'details': serializer.errors
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            logger.error(f"Error in CreditAnalysisView: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CreditPerformanceView(APIView):
+    """Vista para métricas de rendimiento de créditos"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """
+        Obtener métricas de rendimiento de créditos
+        
+        Parámetros de consulta:
+        - period: Período de análisis (7d, 30d, 90d, 1y)
+        - metric_type: Tipo de métrica (collection, risk, performance)
+        
+        Returns:
+            Métricas de rendimiento de créditos
+        """
+        try:
+            from apps.fintech.models import Credit, Installment
+            from django.db.models import Q, Count, Sum, Avg, Case, When, F, DecimalField
+            from datetime import timedelta
+            
+            # Parámetros
+            period = request.query_params.get('period', '30d')
+            metric_type = request.query_params.get('metric_type', 'all')
+            
+            # Calcular fechas según el período
+            now = timezone.now()
+            if period == '7d':
+                start_date = now - timedelta(days=7)
+            elif period == '30d':
+                start_date = now - timedelta(days=30)
+            elif period == '90d':
+                start_date = now - timedelta(days=90)
+            elif period == '1y':
+                start_date = now - timedelta(days=365)
+            else:
+                start_date = now - timedelta(days=30)
+            
+            # Base queryset
+            credits = Credit.objects.filter(created_at__gte=start_date)
+            
+            metrics = {}
+            
+            # Métricas de recaudación
+            if metric_type in ['all', 'collection']:
+                collection_metrics = credits.aggregate(
+                    total_credits=Count('id'),
+                    total_amount=Sum('price'),
+                    total_collected=Sum('total_abonos'),
+                    avg_collection_rate=Avg(
+                        Case(
+                            When(price__gt=0, then=F('total_abonos') / F('price') * 100),
+                            default=0,
+                            output_field=DecimalField()
+                        )
+                    )
+                )
+                
+                # Créditos por estado de recaudación
+                collection_status = credits.annotate(
+                    collection_rate=Case(
+                        When(price__gt=0, then=F('total_abonos') / F('price') * 100),
+                        default=0,
+                        output_field=DecimalField()
+                    )
+                ).aggregate(
+                    fully_collected=Count('id', filter=Q(collection_rate__gte=100)),
+                    partially_collected=Count('id', filter=Q(collection_rate__gte=50, collection_rate__lt=100)),
+                    low_collection=Count('id', filter=Q(collection_rate__lt=50))
+                )
+                
+                metrics['collection'] = {
+                    **collection_metrics,
+                    'collection_status': collection_status
+                }
+            
+            # Métricas de riesgo
+            if metric_type in ['all', 'risk']:
+                risk_metrics = credits.aggregate(
+                    total_in_default=Count('id', filter=Q(is_in_default=True)),
+                    default_rate=Count('id', filter=Q(is_in_default=True)) * 100.0 / Count('id'),
+                    avg_days_in_default=Avg(
+                        Case(
+                            When(is_in_default=True, then=F('first_date_payment')),
+                            default=None
+                        )
+                    )
+                )
+                
+                # Distribución por nivel de morosidad
+                morosidad_distribution = credits.values('morosidad_level').annotate(
+                    count=Count('id'),
+                    total_amount=Sum('price')
+                )
+                
+                metrics['risk'] = {
+                    **risk_metrics,
+                    'morosidad_distribution': list(morosidad_distribution)
+                }
+            
+            # Métricas de rendimiento
+            if metric_type in ['all', 'performance']:
+                performance_metrics = credits.aggregate(
+                    avg_credit_amount=Avg('price'),
+                    avg_credit_days=Avg('credit_days'),
+                    avg_interest_rate=Avg('interest'),
+                    total_earnings=Sum('earnings')
+                )
+                
+                # ROI promedio
+                roi_metrics = credits.filter(cost__gt=0).aggregate(
+                    avg_roi=Avg(
+                        Case(
+                            When(cost__gt=0, then=F('earnings') / F('cost') * 100),
+                            default=0,
+                            output_field=DecimalField()
+                        )
+                    )
+                )
+                
+                metrics['performance'] = {
+                    **performance_metrics,
+                    **roi_metrics
+                }
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'period': period,
+                    'start_date': start_date,
+                    'end_date': now,
+                    'metrics': metrics
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in CreditPerformanceView: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
