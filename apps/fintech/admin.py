@@ -219,7 +219,8 @@ class CreditAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:
-            obj.registered_by = request.user
+            # Forzar la evaluación del SimpleLazyObject para obtener la instancia real de User
+            obj.registered_by = request.user._wrapped if hasattr(request.user, '_wrapped') else request.user
         super().save_model(request, obj, form, change)
 
 @admin.register(ParamsLocation)
