@@ -1,4 +1,4 @@
-from django.contrib.auth.models import AbstractUser, Group, Permission
+from django.contrib.auth.models import AbstractUser, Group, Permission, User as Admin
 from django.db import models, transaction as db_transaction
 from django.utils import timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -8,7 +8,7 @@ import uuid
 import math
 from datetime import timedelta
 
-from apps.fintech.managers import CreditManager, UserProfileManager, TransactionManager, InstallmentManager
+from apps.fintech.managers import CreditManager, TransactionManager, InstallmentManager
 
 class Country(models.Model):
     name = models.CharField(max_length=100)
@@ -163,7 +163,7 @@ class Role(models.Model):
 
 class Seller(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='sellers')
-    user = models.OneToOneField('User', on_delete=models.CASCADE, related_name='seller_profile')
+    user = models.OneToOneField(Admin, on_delete=models.CASCADE, related_name='seller_profile')
     total_sales = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     commissions = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     returns = models.IntegerField(default=0)
@@ -257,7 +257,7 @@ class User(AbstractUser):
     @property
     def is_high_value_customer(self):
         """Indica si es un cliente de alto valor"""
-        return self.total_credit_amount > 5000000  # Más de 5M
+        return self.total_credit_amount > 5000000
     
     @property
     def has_overdue_credits(self):
@@ -308,7 +308,7 @@ class Credit(models.Model):
     # Custom manager
     objects = CreditManager()
 
-    registered_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='credits_registered')
+    registered_by = models.ForeignKey(Admin, on_delete=models.SET_NULL, null=True, related_name='credits_registered')
     seller = models.ForeignKey(Seller, on_delete=models.SET_NULL, null=True, blank=True, related_name='credits_made') 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credits')
 
@@ -697,7 +697,7 @@ class Expense(models.Model):
     subcategory = models.ForeignKey(SubCategory, on_delete=models.SET_NULL, null=True, related_name='expenses')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='expenses')
-    registered_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='expenses')
+    registered_by = models.ForeignKey(Admin, on_delete=models.SET_NULL, null=True, related_name='expenses')
     user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='expense_made_by')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True) 
