@@ -47,5 +47,8 @@ urlpatterns = [
     path('credits/insights/<str:credit_id>/', views.CreditInsightsView.as_view(), name='credit_insights'),
     path('credits/analysis/comparative/', views.CreditAnalysisView.as_view(), name='credit_analysis_comparative'),
     path('credits/performance/', views.CreditPerformanceView.as_view(), name='credit_performance'),
+    
+    # TABLA DE CRÉDITOS PARA DASHBOARD DE RIESGO
+    path('credits/table/', views.CreditsTableView.as_view(), name='credits_table'),
 ]
 

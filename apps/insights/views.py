@@ -1635,3 +1635,131 @@ class CreditPerformanceView(APIView):
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CreditsTableView(APIView):
+    """Vista para tabla de créditos del dashboard de riesgo"""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        """
+        Obtener tabla de créditos con datos estructurados para dashboard de riesgo
+        
+        Parámetros de consulta:
+        - date_from: Fecha de inicio (YYYY-MM-DD)
+        - date_to: Fecha de fin (YYYY-MM-DD)
+        - page: Número de página (default: 1)
+        - page_size: Tamaño de página (default: 20, máximo: 100)
+        - state: Filtrar por estado del crédito
+        - morosidad_level: Filtrar por nivel de morosidad
+        - risk_level: Filtrar por nivel de riesgo
+        - seller_id: Filtrar por vendedor específico
+        - sort_by: Campo de ordenamiento (default: 'created_at')
+        - sort_order: Orden (asc, desc, default: 'desc')
+        """
+        try:
+            from apps.insights.services.credits_table_service import CreditsTableService
+            from datetime import datetime
+            
+            # Validar parámetros requeridos
+            date_from_str = request.query_params.get('date_from')
+            date_to_str = request.query_params.get('date_to')
+            
+            if not date_from_str or not date_to_str:
+                return Response({
+                    'success': False,
+                    'error': 'date_from y date_to son parámetros requeridos (formato: YYYY-MM-DD)'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Parsear fechas
+            try:
+                date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+                date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({
+                    'success': False,
+                    'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validar que date_from <= date_to
+            if date_from > date_to:
+                return Response({
+                    'success': False,
+                    'error': 'date_from debe ser menor o igual a date_to'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener parámetros de paginación
+            try:
+                page = int(request.query_params.get('page', 1))
+                page_size = int(request.query_params.get('page_size', 20))
+                
+                if page < 1:
+                    page = 1
+                if page_size < 1:
+                    page_size = 20
+                if page_size > 100:
+                    page_size = 100
+                    
+            except ValueError:
+                return Response({
+                    'success': False,
+                    'error': 'page y page_size deben ser números enteros'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener filtros
+            filters = {
+                'state': request.query_params.get('state'),
+                'morosidad_level': request.query_params.get('morosidad_level'),
+                'risk_level': request.query_params.get('risk_level'),
+                'seller_id': request.query_params.get('seller_id'),
+                'sort_by': request.query_params.get('sort_by', 'created_at'),
+                'sort_order': request.query_params.get('sort_order', 'desc')
+            }
+            
+            # Validar seller_id si se proporciona
+            if filters['seller_id']:
+                try:
+                    filters['seller_id'] = int(filters['seller_id'])
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'seller_id debe ser un número entero'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validar sort_order
+            if filters['sort_order'] not in ['asc', 'desc']:
+                filters['sort_order'] = 'desc'
+            
+            # Obtener datos de la tabla
+            result = CreditsTableService.get_credits_table_data(
+                date_from=date_from,
+                date_to=date_to,
+                page=page,
+                page_size=page_size,
+                filters=filters
+            )
+            
+            if not result:
+                return Response({
+                    'success': False,
+                    'error': 'No se pudieron obtener los datos de la tabla'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            return Response({
+                'success': True,
+                'data': result,
+                'parameters': {
+                    'date_from': date_from_str,
+                    'date_to': date_to_str,
+                    'page': page,
+                    'page_size': page_size,
+                    **filters
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in CreditsTableView: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
