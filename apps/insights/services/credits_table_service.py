@@ -197,22 +197,22 @@ class CreditsTableService:
                 'description': credit.description or '',
                 
                 # Información del usuario
-                'user_id': credit.user.id_user,
+                'user_id': credit.user.id,
                 'user_full_name': f"{credit.user.first_name} {credit.user.last_name}".strip() or credit.user.username,
                 'user_username': credit.user.username,
                 'user_email': credit.user.email,
                 
                 # Información del vendedor
-                'seller_id': credit.registered_by.id_user if credit.registered_by else None,
+                'seller_id': credit.registered_by.id if credit.registered_by else None,
                 'seller_name': f"{credit.registered_by.first_name} {credit.registered_by.last_name}".strip() if credit.registered_by else None,
-                'registered_by_id': credit.registered_by.id_user if credit.registered_by else None,
+                'registered_by_id': credit.registered_by.id if credit.registered_by else None,
                 
                 # Información financiera
                 'cost': float(credit.cost) if credit.cost else 0.0,
                 'price': float(credit.price) if credit.price else 0.0,
                 'earnings': float(credit.earnings) if credit.earnings else 0.0,
                 'interest': float(credit.interest) if credit.interest else 0.0,
-                'currency': credit.currency.code if credit.currency else 'COP',
+                'currency': credit.currency.currency if credit.currency else 'COP',
                 'total_abonos': float(credit.total_abonos) if credit.total_abonos else 0.0,
                 'pending_amount': float(credit.pending_amount) if credit.pending_amount else 0.0,
                 'percentage_paid': round(percentage_paid, 2),
@@ -349,7 +349,7 @@ class CreditsTableService:
                 return 0.0
             
             # Calcular ROI
-            roi = (credit.earnings / credit.cost) * 100 if credit.earnings else 0
+            roi = float(credit.earnings / credit.cost * 100) if credit.earnings else 0
             
             # Ajustar por riesgo
             risk_adjustment = 1.0
