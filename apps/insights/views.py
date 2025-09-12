@@ -9,6 +9,9 @@ from datetime import datetime, date, timedelta
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, Count, Avg
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 
 from apps.fintech.models import User
 from apps.insights.services.analytics_service import AnalyticsService
@@ -1490,121 +1493,6 @@ class CreditInsightsView(APIView):
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class CreditAnalysisView(APIView):
-    """Vista para análisis comparativo de múltiples créditos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    
-    def get(self, request):
-        """
-        Obtener análisis comparativo de créditos con filtros opcionales
-        
-        Parámetros de consulta:
-        - start_date: Fecha de inicio (YYYY-MM-DD)
-        - end_date: Fecha de fin (YYYY-MM-DD)
-        - subcategory_id: ID de la subcategoría
-        - user_id: ID del usuario
-        - limit: Límite de resultados (opcional)
-        
-        Returns:
-            Análisis comparativo incluyendo:
-            - Resumen general
-            - Análisis por categoría
-            - Análisis por estado
-            - Análisis por nivel de morosidad
-            - Top créditos por monto
-        """
-        try:
-            from apps.insights.services.credit_insights_service import CreditInsightsService
-            from apps.insights.serializers.credit_insights_serializers import CreditAnalysisResponseSerializer
-            from datetime import datetime
-            
-            # Preparar filtros
-            filters = {}
-            
-            # Filtro por fechas
-            start_date_str = request.query_params.get('start_date')
-            end_date_str = request.query_params.get('end_date')
-            
-            if start_date_str:
-                try:
-                    filters['start_date'] = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-                except ValueError:
-                    return Response({
-                        'success': False,
-                        'error': 'Formato de fecha de inicio inválido. Use YYYY-MM-DD'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            if end_date_str:
-                try:
-                    filters['end_date'] = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-                except ValueError:
-                    return Response({
-                        'success': False,
-                        'error': 'Formato de fecha de fin inválido. Use YYYY-MM-DD'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Validar que start_date <= end_date
-            if filters.get('start_date') and filters.get('end_date'):
-                if filters['start_date'] > filters['end_date']:
-                    return Response({
-                        'success': False,
-                        'error': 'La fecha de inicio debe ser menor o igual a la fecha de fin'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Filtro por subcategoría
-            subcategory_id = request.query_params.get('subcategory_id')
-            if subcategory_id:
-                try:
-                    filters['subcategory_id'] = int(subcategory_id)
-                except ValueError:
-                    return Response({
-                        'success': False,
-                        'error': 'ID de subcategoría inválido'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Filtro por usuario
-            user_id = request.query_params.get('user_id')
-            if user_id:
-                try:
-                    filters['user_id'] = int(user_id)
-                except ValueError:
-                    return Response({
-                        'success': False,
-                        'error': 'ID de usuario inválido'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Obtener análisis comparativo
-            analysis_data = CreditInsightsService.get_credits_comparative_analysis(filters)
-            
-            if not analysis_data:
-                return Response({
-                    'success': False,
-                    'error': 'No se pudieron generar el análisis comparativo'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-            # Validar respuesta con serializer
-            response_data = {
-                'success': True,
-                'data': analysis_data
-            }
-            
-            serializer = CreditAnalysisResponseSerializer(data=response_data)
-            if serializer.is_valid():
-                return Response(serializer.validated_data, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'success': False,
-                    'error': 'Error en la validación de datos',
-                    'details': serializer.errors
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                
-        except Exception as e:
-            logger.error(f"Error in CreditAnalysisView: {e}")
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CreditPerformanceView(APIView):
