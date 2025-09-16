@@ -31,6 +31,9 @@ from apps.fintech.services.analytics import KPIService
 from datetime import datetime
 
 class FinanceView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
     def post(self, request):
         try:
             # Validar datos requeridos
@@ -160,6 +163,9 @@ class FinanceView(APIView):
             )
 
 class SellerChartDataAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
     def post(self, request):
         range_days = int(request.data.get("range", 90))
         seller_id = request.data.get("seller_id")
@@ -216,6 +222,9 @@ class SellerChartDataAPIView(APIView):
         return Response(data)
     
 class MonthlyChartDataAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
     def post(self, request):
         try:
             # Obtener parámetros del request
