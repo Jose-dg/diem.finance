@@ -591,7 +591,7 @@ class CreditFilterAPIView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class CreditKPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
     
     def get(self, request):
         """Endpoint para obtener KPIs de créditos"""
