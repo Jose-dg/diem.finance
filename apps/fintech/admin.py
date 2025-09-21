@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib import messages
 
 from .models import (
     AccountMethodAmount, 
@@ -28,6 +29,27 @@ from django import forms
 from .models import Transaction, Credit
 from django.db.models import Q
 from apps.fintech.services.utils import InstallmentCalculator
+
+def change_credit_state_to_solve(modeladmin, request, queryset):
+    """
+    Acción personalizada para cambiar el estado de créditos seleccionados de 'pending' a 'to_solve'
+    """
+    # Filtrar solo los créditos que están en estado 'pending'
+    pending_credits = queryset.filter(state='pending')
+    
+    if not pending_credits.exists():
+        messages.warning(request, 'No hay créditos en estado "pending" seleccionados.')
+        return
+    
+    # Actualizar el estado a 'to_solve'
+    updated_count = pending_credits.update(state='to_solve')
+    
+    if updated_count > 0:
+        messages.success(request, f'Se cambió el estado de {updated_count} crédito(s) de "pending" a "to_solve".')
+    else:
+        messages.warning(request, 'No se pudo actualizar ningún crédito.')
+
+change_credit_state_to_solve.short_description = "Cambiar estado a 'To Solve' (solo créditos pending)"
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -214,6 +236,7 @@ class CreditAdmin(admin.ModelAdmin):
         'installment_number', 'installment_value'
     )
     search_fields = ('uid', 'user__username')
+    actions = [change_credit_state_to_solve]
 
     exclude = ('interest', 'refinancing', 'total_abonos', 'pending_amount', 'installment_number', 'installment_value', 'is_in_default', 'morosidad_level')
 
