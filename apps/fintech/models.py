@@ -113,7 +113,6 @@ class Currency(models.Model):
 
     asset_type = models.CharField(max_length=8, choices=TYPE_CHOICES, default='FIAT')
     id_currency = models.CharField(max_length=4, null=False, blank=False)
-    # simbol 
     currency = models.CharField(max_length=15, null=False, blank=False)
     exchange_rate = models.DecimalField(max_digits=10, decimal_places=4, default=0)
 
@@ -127,7 +126,6 @@ class Account(models.Model):
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     currency = models.ForeignKey(Currency, null=True, blank=True, on_delete=models.SET_NULL)
     
-    # Campo Alegra para facturación electronica.
     eletronic_software_id = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self):
@@ -622,19 +620,37 @@ class Credit(models.Model):
                     effective_days = self._calculate_effective_days(int(credit_days))
                     self.interest = (Decimal(1) / (effective_days / Decimal(30))) * ((price - cost) / cost)
 
-                if self.periodicity and self.credit_days:
-                    # Solo calcular installment_number si no está configurado
-                    if not self.installment_number:
-                        self.installment_number = math.ceil(self.credit_days / periodicity_days)
-                    if self.installment_number > 0:
-                        self.installment_value = (Decimal(str(self.price)) / Decimal(self.installment_number)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
-                    else:
-                        self.installment_value = self.price
+                # CAMBIO: Eliminado auto-cálculo de installment_number e installment_value
+                # Ahora se calculan manualmente basándose en las cuotas ingresadas
+                # mediante el método update_installment_calculations()
+
 
                 super(Credit, self).save(*args, **kwargs)
         finally:
             self._saving = False
     
+    def update_installment_calculations(self):
+        """
+        Actualiza installment_number e installment_value basándose en las cuotas existentes.
+        Debe llamarse después de crear/modificar cuotas desde el admin.
+        """
+        from django.db.models import Avg
+        
+        # Contar cuotas asociadas
+        installment_count = self.installments.count()
+        self.installment_number = installment_count
+        
+        # Calcular valor promedio de cuotas
+        if installment_count > 0:
+            avg_amount = self.installments.aggregate(Avg('amount'))['amount__avg']
+            self.installment_value = avg_amount if avg_amount else Decimal('0.00')
+        else:
+            self.installment_value = Decimal('0.00')
+        
+        # Guardar solo estos campos para evitar recursión
+        self.save(update_fields=['installment_number', 'installment_value'])
+    
+
     @property
     def tracker(self):
         """Propiedad temporal para evitar errores de tracker"""

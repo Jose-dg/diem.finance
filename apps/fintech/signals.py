@@ -183,14 +183,17 @@ def handle_credit_adjustment_delete(sender, instance, **kwargs):
         finally:
             _recalculating_credits.discard(instance.credit.uid)
 
-@receiver(post_save, sender=Credit)
-def crear_cuotas_credito(sender, instance, created, **kwargs):
-    # Solo generar cuotas si es un crédito nuevo y no tiene cuotas
-    if created and not instance.installments.exists():
-        # Verificar si ya se están generando cuotas manualmente
-        if hasattr(instance, '_generating_installments'):
-            return
-        generar_cuotas(instance)
+# CAMBIO: Comentada esta signal para permitir ingreso manual de cuotas desde el admin
+# Las cuotas ahora se ingresan manualmente mediante un formulario inline en CreditAdmin
+# @receiver(post_save, sender=Credit)
+# def crear_cuotas_credito(sender, instance, created, **kwargs):
+#     # Solo generar cuotas si es un crédito nuevo y no tiene cuotas
+#     if created and not instance.installments.exists():
+#         # Verificar si ya se están generando cuotas manualmente
+#         if hasattr(instance, '_generating_installments'):
+#             return
+#         generar_cuotas(instance)
+
 
 # Comentamos esta señal para desacoplar la distribución de cuotas de la creación de transacciones
 # @receiver(post_save, sender=AccountMethodAmount)

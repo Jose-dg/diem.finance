@@ -26,9 +26,11 @@ from .models import (
     Role
     )
 from django import forms
+from django.core.exceptions import ValidationError
 from .models import Transaction, Credit
 from django.db.models import Q
 from apps.fintech.services.utils import InstallmentCalculator
+
 
 def change_credit_state_to_solve(modeladmin, request, queryset):
     """
@@ -228,6 +230,23 @@ class TransactionAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/filter_credits.js',)
 
+# Inline para ingresar cuotas manualmente al crear/editar un crédito
+class InstallmentInline(admin.TabularInline):
+    model = Installment
+    extra = 1  # Mostrar 1 fila vacía por defecto para agregar cuotas
+    fields = ('number', 'due_date', 'amount', 'status')
+    
+    # Campos de solo lectura (opcionales, por ahora ninguno)
+    readonly_fields = []
+    
+    # Configuración de visualización
+    can_delete = True
+    show_change_link = False
+    
+    # Ayuda al usuario
+    verbose_name = "Cuota"
+    verbose_name_plural = "Cuotas del Crédito"
+
 @admin.register(Credit)
 class CreditAdmin(admin.ModelAdmin):
     list_display = (
@@ -237,6 +256,9 @@ class CreditAdmin(admin.ModelAdmin):
     )
     search_fields = ('uid', 'user__username')
     actions = [change_credit_state_to_solve]
+    
+    # Agregar el inline de cuotas
+    inlines = [InstallmentInline]
 
     exclude = ('interest', 'refinancing', 'total_abonos', 'pending_amount', 'installment_number', 'installment_value', 'is_in_default', 'morosidad_level')
 
@@ -245,6 +267,77 @@ class CreditAdmin(admin.ModelAdmin):
             # Forzar la evaluación del SimpleLazyObject para obtener la instancia real de User
             obj.registered_by = request.user._wrapped if hasattr(request.user, '_wrapped') else request.user
         super().save_model(request, obj, form, change)
+    
+    def save_related(self, request, form, formsets, change):
+        """
+        Se ejecuta después de guardar el crédito y los inlines.
+        Aquí validamos las cuotas ingresadas manualmente.
+        """
+        # Primero guardar los formsets (cuotas)
+        super().save_related(request, form, formsets, change)
+        
+        credit = form.instance
+        installments = credit.installments.all()
+        installment_count = installments.count()
+        
+        # Si no hay cuotas, no validar (permitir guardar el crédito sin cuotas inicialmente)
+        if installment_count == 0:
+            return
+        
+        # Validación 1: Suma de montos de cuotas debe ser igual al precio del crédito
+        total_installments = sum(inst.amount for inst in installments if inst.amount)
+        if total_installments != credit.price:
+            raise ValidationError(
+                f"La suma de las cuotas ({total_installments}) debe ser igual al precio del crédito ({credit.price}). "
+                f"Diferencia: {abs(total_installments - credit.price)}"
+            )
+        
+        # Validación 2: Fechas de cuotas deben estar dentro del rango del crédito
+        # Calcular la fecha máxima basándose en credit_days
+        from datetime import timedelta
+        max_date = credit.first_date_payment + timedelta(days=credit.credit_days)
+        
+        for inst in installments:
+            if inst.due_date:
+                if inst.due_date < credit.first_date_payment:
+                    raise ValidationError(
+                        f"La fecha de la cuota #{inst.number} ({inst.due_date}) es anterior a la primera fecha de pago del crédito ({credit.first_date_payment})"
+                    )
+                if inst.due_date > max_date:
+                    raise ValidationError(
+                        f"La fecha de la cuota #{inst.number} ({inst.due_date}) excede los días de crédito. "
+                        f"Fecha máxima permitida: {max_date} (first_date_payment + {credit.credit_days} días)"
+                    )
+
+        
+        # Validación 3: Reglas especiales para las primeras dos cuotas
+        if installment_count >= 2:
+            # Ordenar cuotas por número
+            sorted_installments = sorted(installments, key=lambda x: x.number if x.number else 0)
+            
+            # La primera cuota debe tener la fecha first_date_payment
+            if sorted_installments[0].due_date != credit.first_date_payment:
+                raise ValidationError(
+                    f"La primera cuota (#{sorted_installments[0].number}) debe tener la fecha {credit.first_date_payment}, "
+                    f"pero tiene la fecha {sorted_installments[0].due_date}"
+                )
+            
+            # La segunda cuota debe tener la fecha second_date_payment
+            if sorted_installments[1].due_date != credit.second_date_payment:
+                raise ValidationError(
+                    f"La segunda cuota (#{sorted_installments[1].number}) debe tener la fecha {credit.second_date_payment}, "
+                    f"pero tiene la fecha {sorted_installments[1].due_date}"
+                )
+        
+        # Actualizar cálculos automáticos basándose en las cuotas ingresadas
+        credit.update_installment_calculations()
+        
+        # Mostrar mensaje de éxito
+        messages.success(
+            request, 
+            f"Crédito guardado exitosamente con {installment_count} cuota(s). "
+            f"Valor promedio de cuota: {credit.installment_value}"
+        )
 
 @admin.register(ParamsLocation)
 class ParamsLocationAdmin(admin.ModelAdmin):
