@@ -479,13 +479,45 @@ class CreditsTableService:
                 risk_level = CreditsTableService._determine_risk_level(risk_score, credit)
                 risk_distribution[risk_level] += 1
             
+            # Distribución por vendedor (para filtros en frontend)
+            # Agrupamos por ID y nombre del vendedor
+            from django.db.models.functions import Concat
+            from django.db.models import Value, CharField
+            
+            credits_by_seller = queryset.values(
+                'registered_by__id',
+                'registered_by__first_name', 
+                'registered_by__last_name',
+                'registered_by__username'
+            ).annotate(
+                count=Count('id')
+            ).order_by('-count')
+            
+            # Formatear la respuesta de vendedores
+            sellers_data = []
+            for item in credits_by_seller:
+                if item['registered_by__id']:
+                    first_name = item['registered_by__first_name'] or ''
+                    last_name = item['registered_by__last_name'] or ''
+                    full_name = f"{first_name} {last_name}".strip()
+                    
+                    if not full_name:
+                        full_name = item['registered_by__username'] or f"User {item['registered_by__id']}"
+                        
+                    sellers_data.append({
+                        'id': item['registered_by__id'],
+                        'name': full_name,
+                        'count': item['count']
+                    })
+            
             return {
                 'credits_by_state': list(credits_by_state),
                 'credits_by_morosidad_level': list(credits_by_morosidad_level),
                 'credits_by_risk_level': [
                     {'risk_level': level, 'count': count} 
                     for level, count in risk_distribution.items()
-                ]
+                ],
+                'credits_by_seller': sellers_data
             }
             
         except Exception as e:

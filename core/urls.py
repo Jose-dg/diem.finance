@@ -21,8 +21,10 @@ from rest_framework_simplejwt.views import (
 )
 
 from apps.fintech.views import CustomTokenObtainPairView
+from core.views import health_check
 
 urlpatterns = [
+    path('', health_check, name='health_check'),
     path('admin/', admin.site.urls),
     path('fintech/', include('apps.fintech.urls')),
     path('dashboard/', include('apps.dashboard.urls')),
