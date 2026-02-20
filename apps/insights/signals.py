@@ -1,9 +1,11 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.db import transaction as db_transaction
 import logging
 
 from apps.fintech.models import Credit, Transaction
 from .services import ActivityService
+from .tasks import recalculate_user_metrics_task
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,12 @@ def transaction_activity(sender, instance, created, **kwargs):
                         amount=float(getattr(instance, 'amount', 0)) or None,
                         metadata={'transaction_id': instance.id}
                     )
+            
+            # Recalcular métricas del usuario en segundo plano
+            if instance.user:
+                db_transaction.on_commit(
+                    lambda: recalculate_user_metrics_task.delay(instance.user.id)
+                )
     except Exception as e:
         logger.error(f"Error logging transaction activity: {e}")
 
@@ -38,5 +46,12 @@ def credit_state_activity(sender, instance, created, **kwargs):
                 credit=instance,
                 metadata={'credit_uid': str(instance.uid)}
             )
+            
+            # Recalcular métricas del usuario en segundo plano
+            if instance.user:
+                db_transaction.on_commit(
+                    lambda: recalculate_user_metrics_task.delay(instance.user.id)
+                )
     except Exception as e:
-        logger.error(f"Error logging credit activity: {e}") 
+        logger.error(f"Error logging credit activity: {e}")
+ 

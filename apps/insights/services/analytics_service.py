@@ -1,9 +1,11 @@
 from django.db.models import Q, Count, Sum, Avg, Max, Min
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear, Extract
 from django.utils import timezone
+from django.core.cache import cache
 from datetime import timedelta, datetime
 from decimal import Decimal
 from apps.fintech.models import Credit, Transaction, User, Installment, Expense, Seller
+from apps.insights.models import FinancialControlMetrics
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,9 +13,17 @@ logger = logging.getLogger(__name__)
 class AnalyticsService:
     """Servicio de analytics avanzado para insights - Independiente de modelos de insights"""
     
+    CACHE_TIMEOUT = 60 * 15  # 15 minutos de caché por defecto
+    
     @staticmethod
     def get_portfolio_overview():
         """Vista general del portafolio de créditos"""
+        cache_key = 'insights_portfolio_overview'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             total_credits = Credit.objects.count()
             active_credits = Credit.objects.filter(state='completed').count()
@@ -37,15 +47,20 @@ class AnalyticsService:
                 avg=Avg('price')
             )['avg'] or Decimal('0.00')
             
-            return {
+            data = {
                 'total_credits': total_credits,
                 'active_credits': active_credits,
                 'pending_credits': pending_credits,
                 'total_portfolio_value': total_portfolio_value,
                 'total_pending_amount': total_pending_amount,
                 'avg_credit_amount': avg_credit_amount,
-                'collection_rate': ((total_portfolio_value - total_pending_amount) / total_portfolio_value * 100) if total_portfolio_value > 0 else 0
+                'collection_rate': ((total_portfolio_value - total_pending_amount) / total_portfolio_value * 100) if total_portfolio_value > 0 else 0,
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, AnalyticsService.CACHE_TIMEOUT)
+            return data
         except Exception as e:
             logger.error(f"Error getting portfolio overview: {e}")
             return {}
@@ -53,6 +68,12 @@ class AnalyticsService:
     @staticmethod
     def get_credit_performance_metrics(days=30):
         """Métricas de rendimiento de créditos"""
+        cache_key = f'insights_credit_performance_{days}d'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             start_date = timezone.now() - timedelta(days=days)
             
@@ -85,24 +106,39 @@ class AnalyticsService:
                 total_amount=Sum('price')
             ).order_by('date')
             
-            return {
+            data = {
                 'credits_by_status': list(credits_by_status),
                 'credits_by_category': list(credits_by_category),
                 'daily_trends': list(daily_credits),
-                'period_days': days
+                'period_days': days,
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, AnalyticsService.CACHE_TIMEOUT)
+            return data
         except Exception as e:
             logger.error(f"Error getting credit performance metrics: {e}")
             return {}
     
     @staticmethod
     def get_user_behavior_analytics():
-        """Analytics de comportamiento de usuarios"""
+        """Analytics de comportamiento de usuarios usando métricas pre-calculadas"""
+        cache_key = 'insights_user_behavior'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
-            # Usuarios más activos
+            # Usuarios con mayor riesgo o deuda usando FinancialControlMetrics
+            high_risk_users = FinancialControlMetrics.objects.select_related('user').filter(
+                risk_level__in=['high', 'critical']
+            ).order_by('-risk_score', '-total_overdue_amount')[:10]
+            
+            # Usuarios más activos (mismo que antes o simplificado)
             active_users = User.objects.annotate(
                 credit_count=Count('credits'),
-                transaction_count=Count('transactions'),
                 total_credit_amount=Sum('credits__price'),
                 last_activity=Max('credits__created_at')
             ).filter(
@@ -120,20 +156,34 @@ class AnalyticsService:
                 low_value=Count('id', filter=Q(total_credit_amount__lt=5000))
             )
             
-            return {
+            data = {
                 'active_users': list(active_users.values(
-                    'id_user', 'username', 'credit_count', 'transaction_count', 
+                    'id_user', 'username', 'credit_count', 
                     'total_credit_amount', 'last_activity'
                 )),
-                'user_segments': user_segments
+                'high_risk_users': list(high_risk_users.values(
+                    'user__username', 'risk_level', 'risk_score', 'total_overdue_amount'
+                )),
+                'user_segments': user_segments,
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, AnalyticsService.CACHE_TIMEOUT)
+            return data
         except Exception as e:
             logger.error(f"Error getting user behavior analytics: {e}")
             return {}
     
     @staticmethod
     def get_risk_analytics():
-        """Analytics de riesgo crediticio"""
+        """Analytics de riesgo crediticio optimizado"""
+        cache_key = 'insights_risk_analytics'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             # Créditos en mora
             overdue_credits = Credit.objects.filter(
@@ -166,12 +216,25 @@ class AnalyticsService:
                 avg_pending=Avg('pending_amount')
             ).order_by('-total_pending')
             
-            return {
+            # Resumen de riesgo global desde FinancialControlMetrics
+            global_risk_summary = FinancialControlMetrics.objects.aggregate(
+                avg_risk_score=Avg('risk_score'),
+                total_high_risk=Count('id', filter=Q(risk_level='high')),
+                total_critical_risk=Count('id', filter=Q(risk_level='critical'))
+            )
+            
+            data = {
                 'overdue_credits': overdue_credits,
                 'overdue_installments': overdue_installments,
                 'default_distribution': list(default_distribution),
-                'risk_by_category': list(risk_by_category)
+                'risk_by_category': list(risk_by_category),
+                'global_risk_summary': global_risk_summary,
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, AnalyticsService.CACHE_TIMEOUT)
+            return data
         except Exception as e:
             logger.error(f"Error getting risk analytics: {e}")
             return {}
@@ -179,6 +242,12 @@ class AnalyticsService:
     @staticmethod
     def get_revenue_analytics():
         """Analytics de ingresos y rentabilidad"""
+        cache_key = 'insights_revenue_analytics'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             # Ingresos por período
             monthly_revenue = Credit.objects.filter(
@@ -217,11 +286,16 @@ class AnalyticsService:
                 credit_count=Count('id')
             ).order_by('date')
             
-            return {
+            data = {
                 'monthly_revenue': list(monthly_revenue),
                 'profitability_by_category': list(profitability_by_category),
-                'earnings_trend': list(earnings_trend)
+                'earnings_trend': list(earnings_trend),
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, AnalyticsService.CACHE_TIMEOUT)
+            return data
         except Exception as e:
             logger.error(f"Error getting revenue analytics: {e}")
             return {}
@@ -229,6 +303,12 @@ class AnalyticsService:
     @staticmethod
     def get_operational_metrics():
         """Métricas operacionales"""
+        cache_key = 'insights_operational_metrics'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             # Eficiencia de procesamiento
             processing_times = Credit.objects.filter(
@@ -262,10 +342,15 @@ class AnalyticsService:
                 completion_rate=(Count('id', filter=Q(state='completed')) * 100.0 / Count('id'))
             ).order_by('-credits_created')
             
-            return {
+            data = {
                 'processing_times': processing_times,
-                'seller_performance': list(seller_performance)
+                'seller_performance': list(seller_performance),
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, AnalyticsService.CACHE_TIMEOUT)
+            return data
         except Exception as e:
             logger.error(f"Error getting operational metrics: {e}")
             return {}
@@ -273,6 +358,12 @@ class AnalyticsService:
     @staticmethod
     def get_predictive_insights():
         """Insights predictivos"""
+        cache_key = 'insights_predictive_data'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             # Predicción de demanda
             demand_prediction = Credit.objects.filter(
@@ -306,12 +397,18 @@ class AnalyticsService:
                 default_rate=(Count('id', filter=Q(is_in_default=True)) * 100.0 / Count('id'))
             ).order_by('-default_rate')
             
-            return {
+            data = {
                 'demand_prediction': list(demand_prediction),
                 'payment_patterns': list(payment_patterns),
-                'default_prediction': list(default_prediction)
+                'default_prediction': list(default_prediction),
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, AnalyticsService.CACHE_TIMEOUT)
+            return data
         except Exception as e:
             logger.error(f"Error getting predictive insights: {e}")
             return {}
+
 

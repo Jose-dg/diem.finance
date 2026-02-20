@@ -92,7 +92,8 @@ class CreditsTableService:
     def _get_optimized_queryset():
         """Obtiene queryset optimizado con select_related y prefetch_related"""
         return Credit.objects.select_related(
-            'user', 'subcategory', 'periodicity', 'currency', 'payment'
+            'user', 'seller', 'seller__user', 'registered_by',
+            'subcategory', 'periodicity', 'currency', 'payment'
         ).prefetch_related(
             'installments'
         )
@@ -111,7 +112,7 @@ class CreditsTableService:
             queryset = CreditsTableService._filter_by_risk_level(queryset, filters['risk_level'])
         
         if filters.get('seller_id'):
-            queryset = queryset.filter(registered_by_id=filters['seller_id'])
+            queryset = queryset.filter(seller_id=filters['seller_id'])
         
         return queryset
     
@@ -485,10 +486,10 @@ class CreditsTableService:
             from django.db.models import Value, CharField
             
             credits_by_seller = queryset.values(
-                'registered_by__id',
-                'registered_by__first_name', 
-                'registered_by__last_name',
-                'registered_by__username'
+                'seller__id',
+                'seller__user__first_name', 
+                'seller__user__last_name',
+                'seller__user__username'
             ).annotate(
                 count=Count('id')
             ).order_by('-count')
@@ -496,16 +497,16 @@ class CreditsTableService:
             # Formatear la respuesta de vendedores
             sellers_data = []
             for item in credits_by_seller:
-                if item['registered_by__id']:
-                    first_name = item['registered_by__first_name'] or ''
-                    last_name = item['registered_by__last_name'] or ''
+                if item['seller__id']:
+                    first_name = item['seller__user__first_name'] or ''
+                    last_name = item['seller__user__last_name'] or ''
                     full_name = f"{first_name} {last_name}".strip()
                     
                     if not full_name:
-                        full_name = item['registered_by__username'] or f"User {item['registered_by__id']}"
+                        full_name = item['seller__user__username'] or f"Seller {item['seller__id']}"
                         
                     sellers_data.append({
-                        'id': item['registered_by__id'],
+                        'id': item['seller__id'],
                         'name': full_name,
                         'count': item['count']
                     })

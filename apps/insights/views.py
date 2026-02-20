@@ -1763,3 +1763,113 @@ class CreditsTableView(APIView):
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CreditStatusListView(APIView):
+    """
+    Vista para listar el estado de créditos con filtros dinámicos
+    y KPIs calculados en tiempo real sobre el mismo queryset filtrado.
+
+    Query params:
+        - date_from (str, YYYY-MM-DD): Fecha inicio del periodo.
+        - date_to   (str, YYYY-MM-DD): Fecha fin del periodo.
+        - seller    (int, opcional):    ID del vendedor (Seller.pk).
+        - page      (int, default 1):  Página actual.
+        - page_size (int, default 20): Registros por página (máx 100).
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        try:
+            from apps.insights.services.credit_status_service import CreditStatusService
+            from datetime import datetime, timedelta
+
+            # ── Parseo de fechas ──────────────────────────────────
+            date_from_str = request.query_params.get('date_from')
+            date_to_str = request.query_params.get('date_to')
+
+            # Defaults: últimos 30 días si no se proporcionan
+            today = timezone.now().date()
+            if not date_from_str:
+                date_from = today - timedelta(days=30)
+            else:
+                try:
+                    date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'Formato de date_from inválido. Use YYYY-MM-DD'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            if not date_to_str:
+                date_to = today
+            else:
+                try:
+                    date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'Formato de date_to inválido. Use YYYY-MM-DD'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            if date_from > date_to:
+                return Response({
+                    'success': False,
+                    'error': 'date_from debe ser menor o igual a date_to'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # ── Seller (opcional) ─────────────────────────────────
+            seller_id = None
+            seller_raw = request.query_params.get('seller')
+            if seller_raw:
+                try:
+                    seller_id = int(seller_raw)
+                except ValueError:
+                    return Response({
+                        'success': False,
+                        'error': 'seller debe ser un número entero (ID del vendedor)'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            # ── Paginación ────────────────────────────────────────
+            try:
+                page = max(1, int(request.query_params.get('page', 1)))
+                page_size = min(100, max(1, int(request.query_params.get('page_size', 20))))
+            except ValueError:
+                return Response({
+                    'success': False,
+                    'error': 'page y page_size deben ser números enteros'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # ── Obtener datos ─────────────────────────────────────
+            result = CreditStatusService.get_credit_status_data(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id,
+                page=page,
+                page_size=page_size,
+            )
+
+            if not result:
+                return Response({
+                    'success': False,
+                    'error': 'No se pudieron obtener los datos del estado de créditos'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            return Response({
+                'success': True,
+                'data': result,
+                'filters_applied': {
+                    'date_from': date_from.isoformat(),
+                    'date_to': date_to.isoformat(),
+                    'seller': seller_id,
+                    'page': page,
+                    'page_size': page_size,
+                },
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error in CreditStatusListView: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

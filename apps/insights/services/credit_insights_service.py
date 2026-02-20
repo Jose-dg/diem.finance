@@ -1,6 +1,7 @@
 from django.db.models import Q, Count, Sum, Avg, Max, Min, F, Case, When, DecimalField
 from django.db.models.functions import TruncDate, TruncMonth, Extract, Coalesce
 from django.utils import timezone
+from django.core.cache import cache
 from datetime import timedelta, datetime, date
 from decimal import Decimal
 from typing import Dict, List, Optional, Any
@@ -14,23 +15,25 @@ logger = logging.getLogger(__name__)
 class CreditInsightsService:
     """Servicio para generar insights detallados por crédito individual"""
     
+    CACHE_TIMEOUT = 60 * 15  # 15 minutos
+    
     @staticmethod
     def get_credit_detailed_insights(credit_id: str) -> Dict[str, Any]:
         """
-        Obtiene insights detallados para un crédito específico
-        
-        Args:
-            credit_id: UUID del crédito
-            
-        Returns:
-            Dict con insights detallados del crédito
+        Obtiene insights detallados para un crédito específico con caché
         """
+        cache_key = f'credit_insights_{credit_id}'
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             credit = Credit.objects.select_related(
                 'user', 'subcategory', 'periodicity', 'currency', 'payment'
             ).prefetch_related('installments', 'transactions').get(uid=credit_id)
             
-            insights = {
+            data = {
                 'credit_basic_info': CreditInsightsService._get_credit_basic_info(credit),
                 'payment_analysis': CreditInsightsService._get_payment_analysis(credit),
                 'risk_assessment': CreditInsightsService._get_risk_assessment(credit),
@@ -38,10 +41,13 @@ class CreditInsightsService:
                 'installment_breakdown': CreditInsightsService._get_installment_breakdown(credit),
                 'timeline_analysis': CreditInsightsService._get_timeline_analysis(credit),
                 'comparative_analysis': CreditInsightsService._get_comparative_analysis(credit),
-                'recommendations': CreditInsightsService._get_credit_recommendations(credit)
+                'recommendations': CreditInsightsService._get_credit_recommendations(credit),
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
             
-            return insights
+            cache.set(cache_key, data, CreditInsightsService.CACHE_TIMEOUT)
+            return data
             
         except Credit.DoesNotExist:
             logger.error(f"Credit with ID {credit_id} not found")
@@ -275,8 +281,14 @@ class CreditInsightsService:
         installments = credit.installments.all().order_by('due_date')
         
         # Progreso temporal
-        total_days = (credit.second_date_payment - credit.first_date_payment).days
-        elapsed_days = (timezone.now().date() - credit.first_date_payment).days
+        total_days = 0
+        if credit.second_date_payment and credit.first_date_payment:
+            total_days = (credit.second_date_payment - credit.first_date_payment).days
+        
+        elapsed_days = 0
+        if credit.first_date_payment:
+            elapsed_days = (timezone.now().date() - credit.first_date_payment).days
+            
         progress_percentage = min(100, (elapsed_days / total_days * 100)) if total_days > 0 else 0
         
         # Tendencias de pago por mes
@@ -299,43 +311,40 @@ class CreditInsightsService:
     
     @staticmethod
     def _get_comparative_analysis(credit: Credit) -> Dict[str, Any]:
-        """Análisis comparativo con otros créditos similares"""
-        # Créditos del mismo usuario
-        user_credits = Credit.objects.filter(user=credit.user).exclude(uid=credit.uid)
+        """Análisis comparativo usando métricas del usuario y de la categoría"""
+        # Métricas individuales del usuario pre-calculadas
+        user_metrics = FinancialControlMetrics.objects.filter(user=credit.user).first()
         
         # Créditos de la misma subcategoría
         category_credits = Credit.objects.filter(
             subcategory=credit.subcategory
         ).exclude(uid=credit.uid) if credit.subcategory else Credit.objects.none()
         
-        # Comparación con créditos del usuario
         user_comparison = {}
-        if user_credits.exists():
-            user_avg_payment_rate = user_credits.annotate(
-                payment_rate=Case(
-                    When(installment_number__gt=0, then=F('total_abonos') / F('price') * 100),
-                    default=0,
-                    output_field=DecimalField()
-                )
-            ).aggregate(avg=Avg('payment_rate'))['avg'] or 0
-            
+        if user_metrics:
             current_payment_rate = (credit.total_abonos / credit.price * 100) if credit.price > 0 else 0
-            
             user_comparison = {
-                'user_avg_payment_rate': float(user_avg_payment_rate),
+                'user_avg_risk_score': float(user_metrics.risk_score),
+                'user_total_overdue': float(user_metrics.total_overdue_amount),
                 'current_payment_rate': float(current_payment_rate),
-                'performance_vs_user_avg': float(current_payment_rate - user_avg_payment_rate)
+                'risk_level': user_metrics.risk_level
             }
         
         # Comparación con créditos de la categoría
         category_comparison = {}
         if category_credits.exists():
-            category_avg_default_rate = category_credits.filter(
-                is_in_default=True
-            ).count() / category_credits.count() * 100
+            avg_stats = category_credits.aggregate(
+                avg_price=Avg('price'),
+                avg_pending=Avg('pending_amount'),
+                default_count=Count('id', filter=Q(is_in_default=True)),
+                total_count=Count('id')
+            )
+            
+            category_avg_default_rate = (avg_stats['default_count'] / avg_stats['total_count'] * 100) if avg_stats['total_count'] > 0 else 0
             
             category_comparison = {
                 'category_avg_default_rate': round(category_avg_default_rate, 2),
+                'category_avg_price': float(avg_stats['avg_price'] or 0),
                 'current_is_in_default': credit.is_in_default,
                 'performance_vs_category': 'better' if not credit.is_in_default and category_avg_default_rate > 10 else 'worse'
             }
@@ -473,14 +482,21 @@ class CreditInsightsService:
     @staticmethod
     def get_credits_comparative_analysis(filters: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Análisis comparativo de múltiples créditos
-        
-        Args:
-            filters: Filtros para el análisis (fechas, categorías, etc.)
-            
-        Returns:
-            Dict con análisis comparativo
+        Análisis comparativo de múltiples créditos con caché
         """
+        import hashlib
+        import json
+        
+        # Generar una clave de caché basada en los filtros
+        filters_str = json.dumps(filters or {}, sort_keys=True)
+        filters_hash = hashlib.md5(filters_str.encode()).hexdigest()
+        cache_key = f'credits_comparative_{filters_hash}'
+        
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            cached_data['is_cached'] = True
+            return cached_data
+
         try:
             queryset = Credit.objects.select_related('user', 'subcategory', 'periodicity')
             
@@ -526,7 +542,7 @@ class CreditInsightsService:
                 'uid', 'user__username', 'subcategory__name', 'price', 'pending_amount', 'is_in_default'
             )
             
-            return {
+            data = {
                 'summary': {
                     'total_credits': total_credits,
                     'total_amount': float(total_amount),
@@ -537,8 +553,13 @@ class CreditInsightsService:
                 'category_analysis': list(category_analysis),
                 'state_analysis': list(state_analysis),
                 'morosidad_analysis': list(morosidad_analysis),
-                'top_credits': list(top_credits)
+                'top_credits': list(top_credits),
+                'timestamp': timezone.now().isoformat(),
+                'is_cached': False
             }
+            
+            cache.set(cache_key, data, CreditInsightsService.CACHE_TIMEOUT)
+            return data
             
         except Exception as e:
             logger.error(f"Error in comparative analysis: {e}")

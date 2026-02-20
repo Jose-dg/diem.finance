@@ -178,4 +178,21 @@ def update_financial_control_dashboard():
         
     except Exception as e:
         logger.error(f"Error updating financial control dashboard: {e}")
-        return {'status': 'error', 'message': str(e)} 
+        return {'status': 'error', 'message': str(e)}
+
+@shared_task
+def recalculate_user_metrics_task(user_id):
+    """Tarea para recalculo de métricas de un usuario específico"""
+    try:
+        # Import dynamic to avoid circular dependency if any
+        from apps.fintech.models import User
+        user = User.objects.get(id=user_id)
+        metrics = FinancialControlService.calculate_user_financial_metrics(user)
+        if metrics:
+            logger.info(f"Metrics recalculated for user {user_id}")
+            return {'status': 'success', 'user_id': user_id}
+        return {'status': 'error', 'message': 'Failed to calculate metrics'}
+    except Exception as e:
+        logger.error(f"Error recalculating metrics for user {user_id}: {e}")
+        return {'status': 'error', 'message': str(e)}
+ 

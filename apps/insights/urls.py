@@ -50,5 +50,8 @@ urlpatterns = [
     
     # TABLA DE CRÉDITOS PARA DASHBOARD DE RIESGO
     path('credits/table/', views.CreditsTableView.as_view(), name='credits_table'),
+
+    # ESTADO DE CRÉDITOS CON FILTROS DINÁMICOS Y KPIs
+    path('credits/status/', views.CreditStatusListView.as_view(), name='credit_status_list'),
 ]
 
