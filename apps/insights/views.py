@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
@@ -20,7 +20,7 @@ from apps.insights.services.credit_analysis_service import CreditAnalysisService
 
 class ExecutiveDashboardView(APIView):
     """Vista para dashboard ejecutivo"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener KPIs principales del dashboard ejecutivo"""
@@ -38,7 +38,7 @@ class ExecutiveDashboardView(APIView):
 
 class CreditAnalyticsView(APIView):
     """Vista para analytics de créditos"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener analytics de créditos"""
@@ -62,7 +62,7 @@ class CreditAnalyticsView(APIView):
 
 class RiskDashboardView(APIView):
     """Vista para dashboard de riesgos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener métricas de riesgo"""
@@ -85,7 +85,7 @@ class RiskDashboardView(APIView):
 
 class UserInsightsView(APIView):
     """Vista para insights de usuarios"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener insights de usuarios"""
@@ -108,7 +108,7 @@ class UserInsightsView(APIView):
 
 class OperationalDashboardView(APIView):
     """Vista para dashboard operacional"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener métricas operacionales"""
@@ -131,7 +131,7 @@ class OperationalDashboardView(APIView):
 
 class RevenueDashboardView(APIView):
     """Vista para dashboard de ingresos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener métricas de ingresos"""
@@ -154,7 +154,7 @@ class RevenueDashboardView(APIView):
 
 class PortfolioOverviewView(APIView):
     """Vista para vista general del portafolio"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener vista general del portafolio"""
@@ -172,7 +172,7 @@ class PortfolioOverviewView(APIView):
 
 class PredictiveInsightsView(APIView):
     """Vista para insights predictivos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener insights predictivos"""
@@ -190,7 +190,7 @@ class PredictiveInsightsView(APIView):
 
 class InsightsSummaryView(APIView):
     """Vista resumen de todos los insights independientes"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener resumen de todos los insights independientes"""
@@ -301,7 +301,7 @@ def insights_export(request):
 
 class CreditAnalysisView(APIView):
     """Vista para análisis detallado de créditos con parámetros de fechas"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """
@@ -391,7 +391,7 @@ class CreditAnalysisView(APIView):
 
 class CreditAnalysisSummaryView(APIView):
     """Vista para resumen rápido del análisis de créditos"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """
@@ -448,7 +448,7 @@ class CreditAnalysisSummaryView(APIView):
 
 class CreditAnalysisClientsView(APIView):
     """Vista específica para la tabla de clientes del análisis de créditos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """
@@ -549,7 +549,7 @@ class CreditAnalysisClientsView(APIView):
 
 class ClientsWithoutPaymentsView(APIView):
     """Vista específica para obtener lista de clientes sin pagos en un período"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """
@@ -675,7 +675,7 @@ class ClientsWithoutPaymentsView(APIView):
 
 class FinancialControlDashboardView(APIView):
     """Vista para dashboard de control financiero"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener dashboard de control financiero"""
@@ -696,7 +696,7 @@ class FinancialControlDashboardView(APIView):
 
 class DefaultersListView(APIView):
     """Vista para lista paginada de clientes morosos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener lista paginada de clientes morosos"""
@@ -740,7 +740,7 @@ class DefaultersListView(APIView):
 
 class UserFinancialMetricsView(APIView):
     """Vista para métricas financieras de un usuario específico"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request, user_id=None):
         """Obtener métricas financieras de un usuario"""
@@ -785,7 +785,7 @@ class UserFinancialMetricsView(APIView):
 
 class FinancialAlertsView(APIView):
     """Vista para alertas financieras"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener alertas financieras con paginación"""
@@ -899,7 +899,7 @@ class FinancialAlertsView(APIView):
 
 class DefaultersReportsView(APIView):
     """Vista para reportes de morosos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener reportes de morosos con paginación"""
@@ -983,7 +983,7 @@ class DefaultersReportsView(APIView):
 
 class EnhancedDefaultersInsightsView(APIView):
     """Vista mejorada para insights de clientes morosos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener insights mejorados de clientes morosos"""
@@ -1109,7 +1109,7 @@ class CreditDashboardViewSet(ReadOnlyModelViewSet):
     """ViewSet para dashboard de créditos con cálculos optimizados"""
     serializer_class = CreditDashboardSerializer
     pagination_class = CustomPageNumberPagination
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get_queryset(self):
         """Retorna queryset optimizado para créditos"""
@@ -1145,7 +1145,7 @@ class InstallmentCollectionViewSet(ReadOnlyModelViewSet):
     """ViewSet para recaudo esperado con proyecciones"""
     serializer_class = InstallmentCollectionSerializer
     pagination_class = CustomPageNumberPagination
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get_queryset(self):
         """Retorna queryset optimizado para cuotas"""
@@ -1179,7 +1179,7 @@ class InstallmentCollectionViewSet(ReadOnlyModelViewSet):
 
 class DashboardSummaryView(APIView):
     """Vista para métricas resumidas del dashboard"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener métricas calculadas para el dashboard"""
@@ -1271,7 +1271,7 @@ class DashboardSummaryView(APIView):
 
 class CreditAnalyticsAdvancedView(APIView):
     """Vista para analytics avanzados de créditos"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener analytics detallados de créditos con filtros y agrupaciones"""
@@ -1355,7 +1355,7 @@ class CreditAnalyticsAdvancedView(APIView):
 
 class RiskAnalysisAdvancedView(APIView):
     """Vista para análisis de riesgo"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """Obtener análisis detallado de riesgo"""
@@ -1419,7 +1419,7 @@ class RiskAnalysisAdvancedView(APIView):
 
 class CreditInsightsView(APIView):
     """Vista para insights detallados de un crédito específico"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get(self, request, credit_id):
         """
@@ -1497,7 +1497,7 @@ class CreditInsightsView(APIView):
 
 class CreditPerformanceView(APIView):
     """Vista para métricas de rendimiento de créditos"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """
@@ -1639,7 +1639,7 @@ class CreditPerformanceView(APIView):
 
 class CreditsTableView(APIView):
     """Vista para tabla de créditos del dashboard de riesgo"""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
     
     def get(self, request):
         """
@@ -1777,7 +1777,7 @@ class CreditStatusListView(APIView):
         - page      (int, default 1):  Página actual.
         - page_size (int, default 20): Registros por página (máx 100).
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         try:
