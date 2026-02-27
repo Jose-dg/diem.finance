@@ -422,6 +422,7 @@ class CreditsTableService:
                 total_amount=Coalesce(Sum('price'), 0, output_field=DecimalField()),
                 total_pending=Coalesce(Sum('pending_amount'), 0, output_field=DecimalField()),
                 total_paid=Coalesce(Sum('total_abonos'), 0, output_field=DecimalField()),
+                total_earnings=Coalesce(Sum('earnings'), 0, output_field=DecimalField()),
                 avg_risk_score=Avg('id')  # Placeholder, se calculará después
             )
             
@@ -450,6 +451,7 @@ class CreditsTableService:
                 'total_amount': float(financial_metrics['total_amount']),
                 'total_pending': float(financial_metrics['total_pending']),
                 'total_paid': float(financial_metrics['total_paid']),
+                'total_earnings': float(financial_metrics['total_earnings']),
                 'average_risk_score': round(avg_risk_score, 1),
                 'high_risk_credits_count': high_risk_count,
                 'default_rate': round(default_rate, 1)
