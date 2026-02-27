@@ -33,24 +33,24 @@ class CreditAnalysisViewsTestCase(TestCase):
         self.start_date = date(2025, 5, 1)
         self.end_date = date(2025, 12, 31)
     
-    def test_credit_analysis_view_requires_authentication(self):
-        """Test que la vista requiere autenticación"""
+    def test_credit_analysis_view_allows_unauthenticated(self):
+        """Test que la vista permite acceso sin autenticación (AllowAny)"""
         url = reverse('insights:credit_analysis')
         response = self.client.get(url, {
             'start_date': '2025-05-01',
             'end_date': '2025-12-31'
         })
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
     
-    def test_credit_analysis_view_requires_admin_permission(self):
-        """Test que la vista requiere permisos de admin"""
+    def test_credit_analysis_view_allows_normal_user(self):
+        """Test que la vista permite acceso a usuarios normales (AllowAny)"""
         self.client.force_authenticate(user=self.normal_user)
         url = reverse('insights:credit_analysis')
         response = self.client.get(url, {
             'start_date': '2025-05-01',
             'end_date': '2025-12-31'
         })
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_credit_analysis_view_missing_parameters(self):
         """Test que la vista requiere parámetros obligatorios"""
@@ -280,6 +280,7 @@ class CreditAnalysisViewsTestCase(TestCase):
         self.assertIn('total_requested', summary)
         self.assertIn('total_paid', summary)
         self.assertIn('total_pending', summary)
+        self.assertIn('total_earnings', summary)
         self.assertIn('unique_clients', summary)
         self.assertIn('clients_without_payments', summary)
         self.assertIn('clients_in_default', summary)
@@ -290,6 +291,7 @@ class CreditAnalysisViewsTestCase(TestCase):
         self.assertIsInstance(summary['total_requested'], float)
         self.assertIsInstance(summary['total_paid'], float)
         self.assertIsInstance(summary['total_pending'], float)
+        self.assertIsInstance(summary['total_earnings'], float)
         self.assertIsInstance(summary['unique_clients'], int)
         self.assertIsInstance(summary['clients_without_payments'], int)
         self.assertIsInstance(summary['clients_in_default'], int)

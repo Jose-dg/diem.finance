@@ -23,12 +23,20 @@ class ExecutiveDashboardView(APIView):
     permission_classes = [AllowAny]
     
     def get(self, request):
-        """Obtener KPIs principales del dashboard ejecutivo"""
+        """Dashboard ejecutivo con KPIs principales"""
         try:
-            dashboard_data = DashboardService.get_executive_dashboard()
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
+            
+            data = DashboardService.get_executive_dashboard(
+                date_from=date_from, 
+                date_to=date_to, 
+                seller_id=seller_id
+            )
             return Response({
                 'success': True,
-                'data': dashboard_data
+                'data': data
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
@@ -43,11 +51,24 @@ class CreditAnalyticsView(APIView):
     def get(self, request):
         """Obtener analytics de créditos"""
         try:
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
             days = int(request.query_params.get('days', 30))
-            analytics_data = DashboardService.get_credit_analytics_dashboard()
+            
+            analytics_data = DashboardService.get_credit_analytics_dashboard(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             
             # Agregar métricas de rendimiento
-            performance_metrics = AnalyticsService.get_credit_performance_metrics(days)
+            performance_metrics = AnalyticsService.get_credit_performance_metrics(
+                days=days,
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             analytics_data.update(performance_metrics)
             
             return Response({
@@ -67,10 +88,22 @@ class RiskDashboardView(APIView):
     def get(self, request):
         """Obtener métricas de riesgo"""
         try:
-            risk_data = DashboardService.get_risk_dashboard()
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
+            
+            risk_data = DashboardService.get_risk_dashboard(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             
             # Agregar analytics de riesgo
-            risk_analytics = AnalyticsService.get_risk_analytics()
+            risk_analytics = AnalyticsService.get_risk_analytics(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             risk_data.update(risk_analytics)
             
             return Response({
@@ -90,7 +123,15 @@ class UserInsightsView(APIView):
     def get(self, request):
         """Obtener insights de usuarios"""
         try:
-            user_data = DashboardService.get_user_insights_dashboard()
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
+            
+            user_data = DashboardService.get_user_insights_dashboard(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             
             # Agregar analytics de comportamiento
             behavior_analytics = AnalyticsService.get_user_behavior_analytics()
@@ -113,10 +154,22 @@ class OperationalDashboardView(APIView):
     def get(self, request):
         """Obtener métricas operacionales"""
         try:
-            operational_data = DashboardService.get_operational_dashboard()
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
+            
+            operational_data = DashboardService.get_operational_dashboard(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             
             # Agregar métricas operacionales
-            operational_metrics = AnalyticsService.get_operational_metrics()
+            operational_metrics = AnalyticsService.get_operational_metrics(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             operational_data.update(operational_metrics)
             
             return Response({
@@ -136,10 +189,22 @@ class RevenueDashboardView(APIView):
     def get(self, request):
         """Obtener métricas de ingresos"""
         try:
-            revenue_data = DashboardService.get_revenue_dashboard()
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
+            
+            revenue_data = DashboardService.get_revenue_dashboard(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             
             # Agregar analytics de ingresos
-            revenue_analytics = AnalyticsService.get_revenue_analytics()
+            revenue_analytics = AnalyticsService.get_revenue_analytics(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             revenue_data.update(revenue_analytics)
             
             return Response({
@@ -159,7 +224,15 @@ class PortfolioOverviewView(APIView):
     def get(self, request):
         """Obtener vista general del portafolio"""
         try:
-            portfolio_data = AnalyticsService.get_portfolio_overview()
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
+            
+            portfolio_data = AnalyticsService.get_portfolio_overview(
+                date_from=date_from,
+                date_to=date_to,
+                seller_id=seller_id
+            )
             return Response({
                 'success': True,
                 'data': portfolio_data
@@ -357,9 +430,12 @@ class CreditAnalysisView(APIView):
             include_payments = request.query_params.get('include_payments', 'true').lower() == 'true'
             include_defaults = request.query_params.get('include_defaults', 'true').lower() == 'true'
             
-            # Obtener datos del análisis
+            # Obtener filtro de vendedor (si existe)
+            seller_id = request.query_params.get('seller_id') or request.query_params.get('seller')
+            
+            # Obtener datos del análisis (incluyendo total_earnings filtrado por vendedor y fechas)
             analysis_data = {
-                'summary': CreditAnalysisService.get_credit_analysis_summary(start_date, end_date),
+                'summary': CreditAnalysisService.get_credit_analysis_summary(start_date, end_date, seller_id=seller_id),
                 'clients_table': CreditAnalysisService.get_detailed_clients_table(start_date, end_date, limit)
             }
             
@@ -428,15 +504,19 @@ class CreditAnalysisSummaryView(APIView):
                     'error': 'start_date debe ser menor o igual a end_date'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+            # Obtener filtro de vendedor (si existe)
+            seller_id = request.query_params.get('seller')
+            
             # Obtener solo el resumen
-            summary_data = CreditAnalysisService.get_credit_analysis_summary(start_date, end_date)
+            summary_data = CreditAnalysisService.get_credit_analysis_summary(start_date, end_date, seller_id)
             
             return Response({
                 'success': True,
                 'data': summary_data,
                 'parameters': {
                     'start_date': start_date_str,
-                    'end_date': end_date_str
+                    'end_date': end_date_str,
+                    'seller': seller_id
                 }
             }, status=status.HTTP_200_OK)
             
@@ -1088,7 +1168,7 @@ class EnhancedDefaultersInsightsView(APIView):
 
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from django.db.models import Q, F, ExpressionWrapper, DecimalField
-from django.db.models.functions import Coalesce, ExtractDay
+from django.db.models.functions import Coalesce, ExtractDay, TruncDay
 from apps.insights.serializers.dashboard_serializers import (
     CreditDashboardSerializer,
     InstallmentCollectionSerializer,
@@ -1312,6 +1392,7 @@ class CreditAnalyticsAdvancedView(APIView):
                 )
             )
             
+            
             # Analytics por subcategoría
             analytics_by_subcategory = queryset.values(
                 'subcategory__name'
@@ -1325,8 +1406,8 @@ class CreditAnalyticsAdvancedView(APIView):
             date_from = timezone.now() - timedelta(days=days)
             temporal_analytics = queryset.filter(
                 created_at__gte=date_from
-            ).extra(
-                select={'day': 'date(created_at)'}
+            ).annotate(
+                day=TruncDay('created_at')
             ).values('day').annotate(
                 count=Count('id'),
                 total_amount=Sum('price')
@@ -1512,28 +1593,40 @@ class CreditPerformanceView(APIView):
         """
         try:
             from apps.fintech.models import Credit, Installment
-            from django.db.models import Q, Count, Sum, Avg, Case, When, F, DecimalField
+            from django.db.models import Q, Count, Sum, Avg, Case, When, F, DecimalField, ExpressionWrapper, DateField, DurationField
+            from django.db.models.functions import Cast
             from datetime import timedelta
+            from django.utils import timezone
             
             # Parámetros
             period = request.query_params.get('period', '30d')
             metric_type = request.query_params.get('metric_type', 'all')
+            date_from = request.query_params.get('date_from')
+            date_to = request.query_params.get('date_to')
+            seller_id = request.query_params.get('seller')
             
-            # Calcular fechas según el período
+            # Calcular fechas según el período (solo si no hay fecha explícita)
             now = timezone.now()
-            if period == '7d':
-                start_date = now - timedelta(days=7)
-            elif period == '30d':
-                start_date = now - timedelta(days=30)
-            elif period == '90d':
-                start_date = now - timedelta(days=90)
-            elif period == '1y':
-                start_date = now - timedelta(days=365)
+            if not date_from:
+                if period == '7d':
+                    start_date = now - timedelta(days=7)
+                elif period == '30d':
+                    start_date = now - timedelta(days=30)
+                elif period == '90d':
+                    start_date = now - timedelta(days=90)
+                elif period == '1y':
+                    start_date = now - timedelta(days=365)
+                else:
+                    start_date = now - timedelta(days=30)
             else:
-                start_date = now - timedelta(days=30)
+                start_date = date_from
             
             # Base queryset
             credits = Credit.objects.filter(created_at__gte=start_date)
+            if date_to:
+                credits = credits.filter(created_at__lte=date_to)
+            if seller_id:
+                credits = credits.filter(seller_id=seller_id)
             
             metrics = {}
             
@@ -1572,16 +1665,29 @@ class CreditPerformanceView(APIView):
             
             # Métricas de riesgo
             if metric_type in ['all', 'risk']:
+                today = timezone.now().date()
                 risk_metrics = credits.aggregate(
                     total_in_default=Count('id', filter=Q(is_in_default=True)),
-                    default_rate=Count('id', filter=Q(is_in_default=True)) * 100.0 / Count('id'),
+                    total_credits_count=Count('id'),
                     avg_days_in_default=Avg(
                         Case(
-                            When(is_in_default=True, then=F('first_date_payment')),
+                            When(is_in_default=True, then=ExpressionWrapper(
+                                Cast(today, DateField()) - F('first_date_payment'),
+                                output_field=DurationField()
+                            )),
                             default=None
                         )
                     )
                 )
+                
+                # Post-aggregation calculations to avoid division by zero
+                total_count = risk_metrics.pop('total_credits_count', 0)
+                in_default = risk_metrics.get('total_in_default', 0)
+                risk_metrics['default_rate'] = (in_default * 100.0 / total_count) if total_count > 0 else 0
+                
+                # Convert Duration to Days if it's there
+                if risk_metrics['avg_days_in_default']:
+                    risk_metrics['avg_days_in_default'] = risk_metrics['avg_days_in_default'].days
                 
                 # Distribución por nivel de morosidad
                 morosidad_distribution = credits.values('morosidad_level').annotate(

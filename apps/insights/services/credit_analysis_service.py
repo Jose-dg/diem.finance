@@ -12,19 +12,33 @@ class CreditAnalysisService:
     """Servicio para análisis detallado de créditos con tabla de detalles"""
     
     @staticmethod
-    def get_credit_analysis_summary(start_date, end_date):
+    def get_credit_analysis_summary(start_date, end_date, seller_id=None):
         """
         Obtiene resumen general del análisis de créditos
+        
+        Parámetros:
+        - start_date: Fecha de inicio
+        - end_date: Fecha de fin
+        - seller_id: ID del vendedor (opcional, filtra los créditos por vendedor)
         """
         try:
             creditos_periodo = Credit.objects.filter(
                 created_at__date__range=[start_date, end_date]
             )
             
+            # Aplicar filtro de vendedor si se proporciona
+            if seller_id:
+                try:
+                    creditos_periodo = creditos_periodo.filter(seller_id=int(seller_id))
+                except (ValueError, TypeError):
+                    logger.warning(f"seller_id inválido: {seller_id}")
+            
             total_creditos = creditos_periodo.count()
             total_solicitado = creditos_periodo.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
             total_abonado = creditos_periodo.aggregate(total=Sum('total_abonos'))['total'] or Decimal('0.00')
             total_pendiente = creditos_periodo.aggregate(total=Sum('pending_amount'))['total'] or Decimal('0.00')
+            # Ganancias reales del período (respeta fechas y vendedor)
+            total_ganancias = creditos_periodo.aggregate(total=Sum('earnings'))['total'] or Decimal('0.00')
             
             # Clientes únicos
             clientes_unicos = creditos_periodo.values('user__username').distinct().count()
@@ -53,6 +67,7 @@ class CreditAnalysisService:
                     'total_requested': float(total_solicitado),
                     'total_paid': float(total_abonado),
                     'total_pending': float(total_pendiente),
+                    'total_earnings': float(total_ganancias),
                     'unique_clients': clientes_unicos,
                     'clients_without_payments': clientes_sin_abonos,
                     'clients_in_default': clientes_atrasados,
@@ -64,7 +79,7 @@ class CreditAnalysisService:
             return {}
     
     @staticmethod
-    def get_detailed_clients_table(start_date, end_date, limit=None):
+    def get_detailed_clients_table(start_date, end_date, limit=None, seller_id=None):
         """
         Obtiene tabla detallada de clientes con información completa
         """
@@ -72,6 +87,9 @@ class CreditAnalysisService:
             creditos_periodo = Credit.objects.filter(
                 created_at__date__range=[start_date, end_date]
             ).select_related('user', 'subcategory', 'currency')
+            
+            if seller_id:
+                creditos_periodo = creditos_periodo.filter(seller_id=seller_id)
             
             # Agrupar por cliente con información detallada
             clientes_detalle = creditos_periodo.values(
