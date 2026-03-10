@@ -12,51 +12,61 @@ class DashboardService:
     """Servicio de dashboard con métricas específicas para el panel de control - Independiente de modelos de insights"""
     
     @staticmethod
-    def get_executive_dashboard():
-        """Dashboard ejecutivo con KPIs principales"""
+    def get_executive_dashboard(date_from=None, date_to=None, seller_id=None):
+        """Dashboard ejecutivo con KPIs principales filtrados"""
         try:
             today = timezone.now().date()
             this_month = today.replace(day=1)
             last_month = (this_month - timedelta(days=1)).replace(day=1)
             
+            # Queryset base con filtros
+            credits_qs = Credit.objects.filter(state='completed')
+            users_qs = User.objects.all()
+            
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            
+            if date_from:
+                credits_qs = credits_qs.filter(created_at__gte=date_from)
+                users_qs = users_qs.filter(date_joined__gte=date_from)
+            
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+                users_qs = users_qs.filter(date_joined__lte=date_to)
+            
             # KPIs principales
             kpis = {
-                'total_portfolio': Credit.objects.filter(state='completed').aggregate(
+                'total_portfolio': credits_qs.aggregate(
                     total=Sum('price')
                 )['total'] or Decimal('0.00'),
                 
-                'active_credits': Credit.objects.filter(state='completed').count(),
+                'active_credits': credits_qs.count(),
                 
-                'monthly_disbursements': Credit.objects.filter(
-                    state='completed',
+                'monthly_disbursements': credits_qs.filter(
                     created_at__gte=this_month
                 ).aggregate(
                     total=Sum('price')
                 )['total'] or Decimal('0.00'),
                 
-                'monthly_earnings': Credit.objects.filter(
-                    state='completed',
+                'monthly_earnings': credits_qs.filter(
                     created_at__gte=this_month
                 ).aggregate(
                     total=Sum('earnings')
                 )['total'] or Decimal('0.00'),
                 
-                'pending_amount': Credit.objects.filter(
-                    state='completed'
-                ).aggregate(
+                'pending_amount': credits_qs.aggregate(
                     total=Sum('pending_amount')
                 )['total'] or Decimal('0.00'),
                 
-                'overdue_credits': Credit.objects.filter(
-                    state='completed',
+                'overdue_credits': credits_qs.filter(
                     pending_amount__gt=0
                 ).count(),
                 
-                'new_users_this_month': User.objects.filter(
+                'new_users_this_month': users_qs.filter(
                     date_joined__gte=this_month
                 ).count(),
                 
-                'total_users': User.objects.count()
+                'total_users': users_qs.count()
             }
             
             # Cálculo de tasas
@@ -73,9 +83,18 @@ class DashboardService:
             return {}
     
     @staticmethod
-    def get_credit_analytics_dashboard():
-        """Dashboard de analytics de créditos"""
+    def get_credit_analytics_dashboard(date_from=None, date_to=None, seller_id=None):
+        """Dashboard de analytics de créditos con filtros"""
         try:
+            # Queryset base
+            credits_qs = Credit.objects.all()
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            if date_from:
+                credits_qs = credits_qs.filter(created_at__gte=date_from)
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+
             # Tendencias de créditos por mes (últimos 12 meses)
             monthly_trends = []
             for i in range(12):
@@ -83,7 +102,7 @@ class DashboardService:
                 month_end = month_start.replace(day=28) + timedelta(days=4)
                 month_end = month_end.replace(day=1) - timedelta(days=1)
                 
-                month_data = Credit.objects.filter(
+                month_data = credits_qs.filter(
                     created_at__gte=month_start,
                     created_at__lte=month_end
                 ).aggregate(
@@ -102,7 +121,7 @@ class DashboardService:
                 })
             
             # Distribución por categorías
-            category_distribution = Credit.objects.filter(
+            category_distribution = credits_qs.filter(
                 state='completed'
             ).values(
                 'subcategory__name'
@@ -113,15 +132,17 @@ class DashboardService:
             ).order_by('-total_amount')[:10]
             
             # Estados de créditos
-            credit_states = Credit.objects.values('state').annotate(
+            credit_states = credits_qs.values('state').annotate(
                 count=Count('id'),
                 total_amount=Sum('price')
             )
             
             # Top vendedores
-            top_sellers = Credit.objects.filter(
-                created_at__gte=timezone.now() - timedelta(days=30)
-            ).values(
+            top_sellers_qs = credits_qs
+            if not date_from:
+                top_sellers_qs = top_sellers_qs.filter(created_at__gte=timezone.now() - timedelta(days=30))
+            
+            top_sellers = top_sellers_qs.values(
                 'seller__user__username'
             ).annotate(
                 credits_created=Count('id'),
@@ -142,20 +163,27 @@ class DashboardService:
             return {}
     
     @staticmethod
-    def get_risk_dashboard():
-        """Dashboard de gestión de riesgos"""
+    def get_risk_dashboard(date_from=None, date_to=None, seller_id=None):
+        """Dashboard de gestión de riesgos con filtros"""
         try:
+            # Queryset base
+            credits_qs = Credit.objects.filter(state='completed')
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            if date_from:
+                credits_qs = credits_qs.filter(created_at__gte=date_from)
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+
             # Créditos en mora por días
             overdue_by_days = []
             for days in [1, 7, 15, 30, 60, 90]:
-                overdue_credits = Credit.objects.filter(
-                    state='completed',
+                overdue_credits = credits_qs.filter(
                     pending_amount__gt=0,
                     updated_at__lte=timezone.now() - timedelta(days=days)
                 ).count()
                 
-                overdue_amount = Credit.objects.filter(
-                    state='completed',
+                overdue_amount = credits_qs.filter(
                     pending_amount__gt=0,
                     updated_at__lte=timezone.now() - timedelta(days=days)
                 ).aggregate(
@@ -215,8 +243,8 @@ class DashboardService:
             return {}
     
     @staticmethod
-    def get_user_insights_dashboard():
-        """Dashboard de insights de usuarios"""
+    def get_user_insights_dashboard(date_from=None, date_to=None, seller_id=None):
+        """Dashboard de insights de usuarios con filtros"""
         try:
             # Segmentación de usuarios por valor
             user_segments = User.objects.annotate(
@@ -252,8 +280,8 @@ class DashboardService:
             return {}
     
     @staticmethod
-    def get_operational_dashboard():
-        """Dashboard operacional"""
+    def get_operational_dashboard(date_from=None, date_to=None, seller_id=None):
+        """Dashboard operacional con filtros"""
         try:
             # Eficiencia de procesamiento
             processing_efficiency = Credit.objects.filter(
@@ -313,8 +341,8 @@ class DashboardService:
             return {}
     
     @staticmethod
-    def get_revenue_dashboard():
-        """Dashboard de ingresos y rentabilidad"""
+    def get_revenue_dashboard(date_from=None, date_to=None, seller_id=None):
+        """Dashboard de ingresos y rentabilidad con filtros"""
         try:
             # Ingresos por período
             revenue_trends = []

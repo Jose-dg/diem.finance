@@ -1,6 +1,6 @@
 # 📊 Insights API — Guía de Integración Frontend
 
-> **Base URL**: `/api/insights/`
+> **Base URL**: `/insights/`
 > **Autenticación**: `Authorization: Token <token>` en todos los endpoints.
 > **Formato de respuesta**: Todos devuelven `{ success: bool, data: {...}, error?: string }`.
 
@@ -105,11 +105,11 @@ graph LR
     end
 
     subgraph API["⚡ Dashboard Optimizado"]
-        D1["GET /api/credits/dashboard/"]
-        D2["GET /api/installments/expected-collection/"]
-        D3["GET /api/dashboard/summary/"]
-        D4["GET /api/credits/analytics/"]
-        D5["GET /api/risk/analysis/"]
+        D1["GET /credits/dashboard/"]
+        D2["GET /installments/expected-collection/"]
+        D3["GET /dashboard/summary/"]
+        D4["GET /credits/analytics/"]
+        D5["GET /risk/analysis/"]
     end
 
     subgraph Credit["🔍 Por Crédito"]
@@ -418,7 +418,7 @@ Endpoints optimizados con serializers y paginación de DRF.
 
 ---
 
-#### 🔓 `GET /api/credits/dashboard/`
+#### 🔓 `GET /credits/dashboard/`
 
 ViewSet paginado de créditos con cálculos optimizados.
 
@@ -429,7 +429,7 @@ ViewSet paginado de créditos con cálculos optimizados.
 
 ---
 
-#### 🔓 `GET /api/installments/expected-collection/`
+#### 🔓 `GET /installments/expected-collection/`
 
 Cuotas con proyecciones de recaudo esperado.
 
@@ -442,7 +442,7 @@ Cuotas con proyecciones de recaudo esperado.
 
 ---
 
-#### 🔓 `GET /api/dashboard/summary/`
+#### 🔓 `GET /dashboard/summary/`
 
 Métricas calculadas consolidadas del dashboard.
 
@@ -477,7 +477,7 @@ Métricas calculadas consolidadas del dashboard.
 
 ---
 
-#### 🔓 `GET /api/credits/analytics/`
+#### 🔓 `GET /credits/analytics/`
 
 Analytics avanzados con agrupaciones.
 
@@ -499,7 +499,7 @@ Analytics avanzados con agrupaciones.
 
 ---
 
-#### 🔒 `GET /api/risk/analysis/`
+#### 🔒 `GET /risk/analysis/`
 
 Análisis detallado de riesgo con proyección de pérdidas.
 

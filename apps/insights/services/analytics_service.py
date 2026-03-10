@@ -16,8 +16,8 @@ class AnalyticsService:
     CACHE_TIMEOUT = 60 * 15  # 15 minutos de caché por defecto
     
     @staticmethod
-    def get_portfolio_overview():
-        """Vista general del portafolio de créditos"""
+    def get_portfolio_overview(date_from=None, date_to=None, seller_id=None):
+        """Vista general del portafolio de créditos con filtros"""
         cache_key = 'insights_portfolio_overview'
         cached_data = cache.get(cache_key)
         if cached_data:
@@ -25,23 +25,32 @@ class AnalyticsService:
             return cached_data
 
         try:
-            total_credits = Credit.objects.count()
-            active_credits = Credit.objects.filter(state='completed').count()
-            pending_credits = Credit.objects.filter(state='pending').count()
+            # Queryset base
+            credits_qs = Credit.objects.all()
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            if date_from:
+                credits_qs = credits_qs.filter(created_at__gte=date_from)
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+
+            total_credits = credits_qs.count()
+            active_credits = credits_qs.filter(state='completed').count()
+            pending_credits = credits_qs.filter(state='pending').count()
             
-            total_portfolio_value = Credit.objects.filter(
+            total_portfolio_value = credits_qs.filter(
                 state='completed'
             ).aggregate(
                 total=Sum('price')
             )['total'] or Decimal('0.00')
             
-            total_pending_amount = Credit.objects.filter(
+            total_pending_amount = credits_qs.filter(
                 state='completed'
             ).aggregate(
                 total=Sum('pending_amount')
             )['total'] or Decimal('0.00')
             
-            avg_credit_amount = Credit.objects.filter(
+            avg_credit_amount = credits_qs.filter(
                 state='completed'
             ).aggregate(
                 avg=Avg('price')
@@ -66,8 +75,8 @@ class AnalyticsService:
             return {}
     
     @staticmethod
-    def get_credit_performance_metrics(days=30):
-        """Métricas de rendimiento de créditos"""
+    def get_credit_performance_metrics(days=30, date_from=None, date_to=None, seller_id=None):
+        """Métricas de rendimiento de créditos con filtros"""
         cache_key = f'insights_credit_performance_{days}d'
         cached_data = cache.get(cache_key)
         if cached_data:
@@ -75,20 +84,26 @@ class AnalyticsService:
             return cached_data
 
         try:
-            start_date = timezone.now() - timedelta(days=days)
-            
+            if not date_from:
+                start_date = timezone.now() - timedelta(days=days)
+            else:
+                start_date = date_from
+                
+            # Queryset base
+            credits_qs = Credit.objects.filter(created_at__gte=start_date)
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+
             # Créditos por estado
-            credits_by_status = Credit.objects.filter(
-                created_at__gte=start_date
-            ).values('state').annotate(
+            credits_by_status = credits_qs.values('state').annotate(
                 count=Count('id'),
                 total_amount=Sum('price')
             )
             
             # Créditos por categoría
-            credits_by_category = Credit.objects.filter(
-                created_at__gte=start_date
-            ).values(
+            credits_by_category = credits_qs.values(
                 'subcategory__name'
             ).annotate(
                 count=Count('id'),
@@ -97,9 +112,7 @@ class AnalyticsService:
             ).order_by('-total_amount')
             
             # Tendencias temporales
-            daily_credits = Credit.objects.filter(
-                created_at__gte=start_date
-            ).annotate(
+            daily_credits = credits_qs.annotate(
                 date=TruncDate('created_at')
             ).values('date').annotate(
                 count=Count('id'),
@@ -176,8 +189,8 @@ class AnalyticsService:
             return {}
     
     @staticmethod
-    def get_risk_analytics():
-        """Analytics de riesgo crediticio optimizado"""
+    def get_risk_analytics(date_from=None, date_to=None, seller_id=None):
+        """Analytics de riesgo crediticio optimizado con filtros"""
         cache_key = 'insights_risk_analytics'
         cached_data = cache.get(cache_key)
         if cached_data:
@@ -185,28 +198,41 @@ class AnalyticsService:
             return cached_data
 
         try:
+            # Queryset base
+            credits_qs = Credit.objects.filter(state='completed')
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            if date_from:
+                credits_qs = credits_qs.filter(created_at__gte=date_from)
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+
             # Créditos en mora
-            overdue_credits = Credit.objects.filter(
-                state='completed',
+            overdue_credits = credits_qs.filter(
                 pending_amount__gt=0
             ).count()
             
-            # Cuotas vencidas
-            overdue_installments = Installment.objects.filter(
+            # Cuotas vencidas (Nota: Installments no tienen seller_id directamente, pero podemos filtrar por credit__seller_id)
+            installments_qs = Installment.objects.all()
+            if seller_id:
+                installments_qs = installments_qs.filter(credit__seller_id=seller_id)
+            if date_from:
+                installments_qs = installments_qs.filter(due_date__gte=date_from) # O created_at? Usamos due_date para riesgo
+            if date_to:
+                installments_qs = installments_qs.filter(due_date__lte=date_to)
+
+            overdue_installments = installments_qs.filter(
                 status='overdue'
             ).count()
             
             # Distribución de morosidad
-            default_distribution = Credit.objects.filter(
-                state='completed'
-            ).values('morosidad_level').annotate(
+            default_distribution = credits_qs.values('morosidad_level').annotate(
                 count=Count('id'),
                 total_amount=Sum('pending_amount')
             )
             
             # Riesgo por categoría
-            risk_by_category = Credit.objects.filter(
-                state='completed',
+            risk_by_category = credits_qs.filter(
                 pending_amount__gt=0
             ).values(
                 'subcategory__name'
@@ -240,8 +266,8 @@ class AnalyticsService:
             return {}
     
     @staticmethod
-    def get_revenue_analytics():
-        """Analytics de ingresos y rentabilidad"""
+    def get_revenue_analytics(date_from=None, date_to=None, seller_id=None):
+        """Analytics de ingresos y rentabilidad con filtros"""
         cache_key = 'insights_revenue_analytics'
         cached_data = cache.get(cache_key)
         if cached_data:
@@ -249,9 +275,17 @@ class AnalyticsService:
             return cached_data
 
         try:
+            # Queryset base
+            credits_qs = Credit.objects.filter(state='completed')
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            if date_from:
+                credits_qs = credits_qs.filter(created_at__gte=date_from)
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+
             # Ingresos por período
-            monthly_revenue = Credit.objects.filter(
-                state='completed',
+            monthly_revenue = credits_qs.filter(
                 created_at__gte=timezone.now() - timedelta(days=365)
             ).annotate(
                 month=TruncMonth('created_at')
@@ -262,9 +296,7 @@ class AnalyticsService:
             ).order_by('month')
             
             # Rentabilidad por categoría
-            profitability_by_category = Credit.objects.filter(
-                state='completed'
-            ).values(
+            profitability_by_category = credits_qs.values(
                 'subcategory__name'
             ).annotate(
                 total_revenue=Sum('earnings'),
@@ -276,8 +308,7 @@ class AnalyticsService:
             ).order_by('-total_revenue')
             
             # Tendencias de ganancias
-            earnings_trend = Credit.objects.filter(
-                state='completed',
+            earnings_trend = credits_qs.filter(
                 created_at__gte=timezone.now() - timedelta(days=90)
             ).annotate(
                 date=TruncDate('created_at')
@@ -301,8 +332,8 @@ class AnalyticsService:
             return {}
     
     @staticmethod
-    def get_operational_metrics():
-        """Métricas operacionales"""
+    def get_operational_metrics(date_from=None, date_to=None, seller_id=None):
+        """Métricas operacionales con filtros"""
         cache_key = 'insights_operational_metrics'
         cached_data = cache.get(cache_key)
         if cached_data:
@@ -310,8 +341,17 @@ class AnalyticsService:
             return cached_data
 
         try:
+            # Queryset base
+            credits_qs = Credit.objects.all()
+            if seller_id:
+                credits_qs = credits_qs.filter(seller_id=seller_id)
+            if date_from:
+                credits_qs = credits_qs.filter(created_at__gte=date_from)
+            if date_to:
+                credits_qs = credits_qs.filter(created_at__lte=date_to)
+
             # Eficiencia de procesamiento
-            processing_times = Credit.objects.filter(
+            processing_times = credits_qs.filter(
                 state__in=['completed', 'to_solve'],
                 created_at__gte=timezone.now() - timedelta(days=30)
             ).aggregate(
@@ -329,7 +369,7 @@ class AnalyticsService:
                 processing_times['completion_rate'] = 0
             
             # Distribución de trabajo por vendedor
-            seller_performance = Credit.objects.filter(
+            seller_performance = credits_qs.filter(
                 created_at__gte=timezone.now() - timedelta(days=30)
             ).values(
                 'seller__user__username'

@@ -37,11 +37,11 @@ urlpatterns = [
     path('financial-control/reports/', views.DefaultersReportsView.as_view(), name='defaulters_reports'),
     
     # NUEVAS VISTAS DE DASHBOARD OPTIMIZADAS
-    path('api/credits/dashboard/', views.CreditDashboardViewSet.as_view({'get': 'list'}), name='credits_dashboard'),
-    path('api/installments/expected-collection/', views.InstallmentCollectionViewSet.as_view({'get': 'list'}), name='installments_collection'),
-    path('api/dashboard/summary/', views.DashboardSummaryView.as_view(), name='dashboard_summary'),
-    path('api/credits/analytics/', views.CreditAnalyticsAdvancedView.as_view(), name='credits_analytics_advanced'),
-    path('api/risk/analysis/', views.RiskAnalysisAdvancedView.as_view(), name='risk_analysis_advanced'),
+    path('credits/dashboard/', views.CreditDashboardViewSet.as_view({'get': 'list'}), name='credits_dashboard'),
+    path('installments/expected-collection/', views.InstallmentCollectionViewSet.as_view({'get': 'list'}), name='installments_collection'),
+    path('dashboard/summary/', views.DashboardSummaryView.as_view(), name='dashboard_summary'),
+    path('credits/analytics/', views.CreditAnalyticsAdvancedView.as_view(), name='credits_analytics_advanced'),
+    path('risk/analysis/', views.RiskAnalysisAdvancedView.as_view(), name='risk_analysis_advanced'),
     
     # NUEVAS VISTAS PARA INSIGHTS POR CRÉDITO
     path('credits/insights/<str:credit_id>/', views.CreditInsightsView.as_view(), name='credit_insights'),
