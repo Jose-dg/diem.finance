@@ -100,13 +100,15 @@ DATABASES["default"]["ATOMIC_REQUESTS"] = True
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'finance',
+#         'NAME': 'fintech_nueva',
 #         'USER': 'postgres',
 #         'PASSWORD': '7508',
 #         'HOST': 'localhost', 
 #         'PORT': '5432', 
 #     }
 # }
+
+# DATABASES["default"]["ATOMIC_REQUESTS"] = True
 
 CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS')
 
@@ -130,9 +132,9 @@ CSRF_TRUSTED_ORIGINS = [
     'https://finance-app-one-navy.vercel.app'
 ]
 
-# Configuración de autenticación personalizada
+AUTH_USER_MODEL = 'fintech.User'
+
 AUTHENTICATION_BACKENDS = [
-    'apps.fintech.backends.FintechAuthenticationBackend',
     'apps.fintech.backends.ClientAuthenticationBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]

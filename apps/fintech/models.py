@@ -1,4 +1,4 @@
-from django.contrib.auth.models import AbstractUser, Group, Permission, User as Admin
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models, transaction as db_transaction
 from django.utils import timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -8,7 +8,7 @@ import uuid
 import math
 from datetime import timedelta
 
-from apps.fintech.managers import CreditManager, TransactionManager, InstallmentManager
+from apps.fintech.managers import InstallmentManager
 
 class Country(models.Model):
     name = models.CharField(max_length=100)
@@ -68,7 +68,7 @@ class Label(models.Model):
         return f"{self.name}" 
 
 class Address(models.Model):
-    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='addresses')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='addresses')
     address_type = models.CharField(max_length=50, choices=[('billing', 'Billing'), ('shipping', 'Shipping')])
     address = models.CharField(max_length=255)
     city = models.CharField(max_length=100)
@@ -159,18 +159,37 @@ class Role(models.Model):
     def __str__(self):
         return self.name
 
+class UserManager(BaseUserManager):
+    def create_user(self, username, password=None, **extra_fields):
+        if not username:
+            raise ValueError('El username es obligatorio')
+        user = self.model(username=username, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, username, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(username, password, **extra_fields)
+
+
 class Seller(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='sellers')
-    user = models.OneToOneField(Admin, on_delete=models.CASCADE, related_name='seller_profile')
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='seller_profile')
     total_sales = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     commissions = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     returns = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.user}"
-       
+
 class User(AbstractUser):
+    objects = UserManager()
+    REQUIRED_FIELDS = []
+
     id_user = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    email = models.EmailField(blank=True, default='')
     document = models.ForeignKey(Identifier, null=True, blank=True, on_delete=models.SET_NULL)
     country = models.ForeignKey(Country, null=True, blank=True, on_delete=models.SET_NULL)
     city = models.ForeignKey(ParamsLocation, null=True, blank=True, on_delete=models.SET_NULL)
@@ -182,23 +201,7 @@ class User(AbstractUser):
     reference_2 = models.CharField(max_length=255, null=True, blank=True)
     electronic_id = models.CharField(max_length=50, blank=True, null=True)
 
-    # Relación con Role
     role = models.ForeignKey(Role, null=True, blank=True, on_delete=models.SET_NULL)
-    groups = models.ManyToManyField(
-        Group,
-        related_name='fintech_user_set',  # Cambia el related_name para evitar el conflicto
-        blank=True,
-        help_text=('The groups this user belongs to. A user will get all permissions granted to each of their groups.'),
-        verbose_name=('groups'),
-    )
-
-    user_permissions = models.ManyToManyField(
-        Permission,
-        related_name='fintech_user_permissions_set',  # Cambia el related_name para evitar el conflicto
-        blank=True,
-        help_text=('Specific permissions for this user.'),
-        verbose_name=('user permissions'),
-    )
 
     def __str__(self):
         return self.username
@@ -303,12 +306,9 @@ class Credit(models.Model):
         ('preorder', 'Preorder')
     )
     
-    # Custom manager
-    objects = CreditManager()
-
-    registered_by = models.ForeignKey(Admin, on_delete=models.SET_NULL, null=True, related_name='credits_registered')
-    seller = models.ForeignKey(Seller, on_delete=models.SET_NULL, null=True, blank=True, related_name='credits_made') 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credits')
+    registered_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='credits_registered')
+    seller = models.ForeignKey(Seller, on_delete=models.SET_NULL, null=True, blank=True, related_name='credits_made')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='credits')
 
     state = models.CharField(max_length=15, choices=ORDER_STATES, default='pending')
     subcategory = models.ForeignKey('SubCategory', null=True, blank=True, on_delete=models.SET_NULL)
@@ -553,12 +553,7 @@ class Credit(models.Model):
         self.save(update_fields=['total_abonos', 'pending_amount'])
 
     def update_pending_amount(self):
-        """
-        Recalcula el saldo pendiente del crédito basado en el total de abonos.
-        """
         self.pending_amount = self.price - self.total_abonos
-        # Usar update_fields para evitar disparar signals innecesarios
-        self.save(update_fields=['pending_amount'])
     
     def _calculate_effective_days(self, total_days):
         """
@@ -651,29 +646,6 @@ class Credit(models.Model):
         self.save(update_fields=['installment_number', 'installment_value'])
     
 
-    @property
-    def tracker(self):
-        """Propiedad temporal para evitar errores de tracker"""
-        class DummyTracker:
-            def __init__(self):
-                self._changed_fields = set()
-            
-            def has_changed(self, field_name):
-                """Simula el comportamiento de has_changed"""
-                return False
-            
-            def changed_fields(self):
-                """Retorna campos que han cambiado"""
-                return self._changed_fields
-            
-            def set_changed(self, field_name):
-                """Marca un campo como cambiado"""
-                self._changed_fields.add(field_name)
-        
-        if not hasattr(self, '_dummy_tracker'):
-            self._dummy_tracker = DummyTracker()
-        return self._dummy_tracker
-
 class Transaction(models.Model):
     
     TRANSACTION_TYPES = [
@@ -688,13 +660,10 @@ class Transaction(models.Model):
         ('reversed', 'Reversed')
     ]
     
-    # Custom manager
-    objects = TransactionManager()
-
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     transaction_type = models.CharField(max_length=50, choices=TRANSACTION_TYPES)
     category = models.ForeignKey('SubCategory', on_delete=models.SET_NULL, null=True, related_name='transactions')
-    user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='transactions')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='transactions')
     agent = models.ForeignKey('Seller', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
     status = models.CharField(max_length=50, choices=TRANSACTION_STATUSES, default='confirmed')
     
@@ -713,8 +682,8 @@ class Expense(models.Model):
     subcategory = models.ForeignKey(SubCategory, on_delete=models.SET_NULL, null=True, related_name='expenses')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='expenses')
-    registered_by = models.ForeignKey(Admin, on_delete=models.SET_NULL, null=True, related_name='expenses')
-    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='expense_made_by')
+    registered_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='expenses')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='expense_made_by')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True) 
 
@@ -838,12 +807,6 @@ class Installment(models.Model):
         
         self.paid_on = timezone.now().date()
         self.save()
-
-    def is_overdue(self):
-        return self.status == 'pending' and self.due_date and timezone.now().date() > self.due_date
-
-    def get_total_amount_due(self):
-        return self.remaining_amount + self.late_fee
 
     def __str__(self):
         if self.credit and self.credit.user:
