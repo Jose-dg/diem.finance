@@ -4,12 +4,13 @@
 Django-based financial management system for credit lending operations. Tracks credits, installment payments, morosidad (default levels), and provides analytics dashboards for portfolio management. Deployed on Render with PostgreSQL + Redis + Celery.
 
 ## Architecture
-Five Django apps under `apps/`:
-- **fintech** — Core domain: User (clients), Credit, Installment, Transaction, Account, Seller. Holds all business logic via a service layer at `apps/fintech/services/`.
+Six Django apps under `apps/`:
+- **fintech** — Core domain: User (clients + staff), Credit, Installment, Transaction, Account, Seller. Holds all business logic via a service layer at `apps/fintech/services/`.
 - **dashboard** — Read-only dashboard views that aggregate fintech data for the frontend.
 - **insights** — Analytics engine: CLV, financial alerts, defaulter reports, credit analysis. Has its own service layer at `apps/insights/services/`.
 - **revenue** — `CreditEarnings` model tracking realized vs. theoretical earnings per credit.
 - **forecasting** — Forecasting models (early stage, minimal endpoints).
+- **interactions** — _(planned)_ Geolocation and field collection tracking. New app, does not modify `fintech`. See `docs/PLAN_GEOLOCALIZACION_Y_COBRANZA.md`.
 
 @docs/architecture.md
 
@@ -90,16 +91,24 @@ python manage.py test apps.fintech.tests.test_credit_lifecycle  # One file
 - `DEFAULT_AUTO_FIELD = BigAutoField` — all PKs are auto-incrementing integers.
 - Many models add a `uid = UUIDField(default=uuid.uuid4, editable=False, unique=True)` as a stable external identifier (not the PK).
 - No global BaseModel — `created_at`/`updated_at` are added per-model where needed.
-- Custom managers: `CreditManager`, `TransactionManager`, `InstallmentManager`.
+- Custom managers: `InstallmentManager` only. `CreditManager` and `TransactionManager` were removed — use the ORM directly.
 - `ATOMIC_REQUESTS = True` — every HTTP request is already wrapped in a DB transaction.
 - `USE_TZ = False` — datetimes are naive (no timezone info). `TIME_ZONE = 'America/Bogota'`.
 
-### Dual user model (critical)
-There are **two separate user tables**:
-- `django.contrib.auth.User` (`Admin` in imports) — staff/admins only. This is what `get_user_model()` returns.
-- `apps.fintech.models.User` — clients. Extends `AbstractUser` but is NOT `AUTH_USER_MODEL`. Import explicitly as `from apps.fintech.models import User`.
+### User model (critical)
+`AUTH_USER_MODEL = 'fintech.User'` — there is **one user table** for everyone (clients and staff/admins).
 
-`Seller.user` points to `auth.User`. `Credit.user` points to `apps.fintech.models.User`.
+- `get_user_model()` returns `apps.fintech.models.User`
+- All FK references to user use `settings.AUTH_USER_MODEL` in model definitions
+- `Seller.user` → `fintech.User` (OneToOne). `Credit.user` → `fintech.User`. `Credit.registered_by` → `fintech.User`
+- Staff/admins have `is_staff = True` and `is_superuser = True` on the same `fintech.User` model
+- `auth.User` is swapped out — do not import or reference it anywhere
+
+To import the user model in code outside `fintech/models.py`:
+```python
+from django.contrib.auth import get_user_model
+User = get_user_model()  # returns fintech.User
+```
 
 ### Views / Viewsets
 - `apps.fintech`: mix of `ModelViewSet` (manually wired, no Router) and `APIView` / `@api_view`.
@@ -135,10 +144,11 @@ Beat schedule runs: credit recalculation (2 AM), installment maintenance (6 AM),
 - **`Credit.save()` has recursion protection**: uses `self._saving` flag + `db_transaction.atomic()`. When updating specific fields, always use `save(update_fields=[...])` to avoid triggering the full save logic.
 - **`Installment` is flagged for redesign**: the model has a `TODO` comment in `models.py` describing known problems. Avoid adding more complexity to it.
 - **Celery import**: always `from core.celery import task_app`, not `from core.celery import app`.
-- **Auth backends**: clients authenticate via `FintechAuthenticationBackend` which wraps `apps.fintech.models.User` in a `UserWrapper`. Don't assume `request.user` is always a plain `auth.User` instance.
+- **Auth backend**: `ClientAuthenticationBackend` in `apps/fintech/backends.py` allows login by username, email, or phone number. Uses `get_user_model()` — no `UserWrapper`, no bridging between models.
 - **`select_related` on Credit**: `Credit` has FKs to `user`, `seller`, `currency`, `periodicity`, `payment`, `subcategory`. Always add `select_related` when listing credits to avoid N+1.
-- **`insights` permissions temporarily disabled**: several `insights` views have `permission_classes = [AllowAny]` (auth disabled for frontend testing). Restore before production.
+- **Collector endpoints without auth**: `fintech/views.py` — `collector_dashboard`, `due_today_installments`, `due_tomorrow_installments`, `upcoming_installments`, `overdue_installments` have `@permission_classes([IsAuthenticated])` commented out. Restore before exposing to production frontend.
 - **No API documentation**: no Swagger/drf-spectacular configured.
+- **New apps go in `apps/`**: never add new domain models to `fintech/models.py`. Create a new Django app instead (pattern: `interactions`).
 
 ## Files to never modify
 - `apps/*/migrations/` — never edit existing migration files; only create new ones.
