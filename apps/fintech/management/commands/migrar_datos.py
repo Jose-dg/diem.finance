@@ -49,9 +49,10 @@ class Command(BaseCommand):
             ('Seller',           self._seller),
             ('Credit',           self._credit),
             ('Installment',      self._installment),
-            ('Transaction',      self._transaction),
-            ('Expense',          self._expense),
-            ('CreditEarnings',   self._credit_earnings),
+            ('Transaction',           self._transaction),
+            ('AccountMethodAmount',   self._account_method_amount),
+            ('Expense',               self._expense),
+            ('CreditEarnings',        self._credit_earnings),
         ]
         for label, fn in pasos:
             self.stdout.write(f'→ {label}... ', ending='')
@@ -342,6 +343,23 @@ class Command(BaseCommand):
                 mapped.append(tuple(row))
             dest.executemany(sql, mapped)
         self._reset_seq('fintech_expense')
+        return len(rows)
+
+    def _account_method_amount(self):
+        cols, rows = self._fetch("""
+            SELECT id, payment_code, amount, amount_paid, credit_id, currency_id, payment_method_id, transaction_id
+            FROM fintech_accountmethodamount
+        """)
+        if self.dry or not rows:
+            return len(rows)
+        sql = """INSERT INTO fintech_accountmethodamount
+                   (id, payment_code, amount, amount_paid, credit_id, currency_id, payment_method_id, transaction_id)
+                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                 ON CONFLICT (id) DO NOTHING"""
+        with connection.cursor() as dest:
+            for i in range(0, len(rows), 500):
+                dest.executemany(sql, rows[i:i+500])
+        self._reset_seq('fintech_accountmethodamount')
         return len(rows)
 
     def _credit_earnings(self):
