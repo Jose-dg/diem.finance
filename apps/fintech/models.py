@@ -151,10 +151,8 @@ class AccountMethodAmount(models.Model):
     def __str__(self):
         return f"Payment method {self.payment_method.name} - Amount Paid: {self.amount_paid}"
 
-# El modelo Role es el que se encarga de definir los roles de los usuarios en el sistema y esta haciendo lo mismo que el modelo Seller
 class Role(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    is_staff_role = models.BooleanField(default=False)  
 
     def __str__(self):
         return self.name
@@ -200,8 +198,6 @@ class User(AbstractUser):
     reference_1 = models.CharField(max_length=255, null=True, blank=True)
     reference_2 = models.CharField(max_length=255, null=True, blank=True)
     electronic_id = models.CharField(max_length=50, blank=True, null=True)
-
-    role = models.ForeignKey(Role, null=True, blank=True, on_delete=models.SET_NULL)
 
     def __str__(self):
         return self.username
@@ -331,6 +327,7 @@ class Credit(models.Model):
     is_in_default = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
 
     morosidad_level = models.CharField(max_length=20, choices=[
         ('on_time', 'On Time'),
@@ -609,6 +606,12 @@ class Credit(models.Model):
                     self.pending_amount = self.price
 
                 self.earnings = price - cost
+
+                # Fijar fecha de cierre la primera vez que el crédito se completa
+                if self.state == 'completed' and not self.completed_at:
+                    self.completed_at = timezone.now()
+                    if kwargs.get('update_fields') is not None:
+                        kwargs['update_fields'] = list(kwargs['update_fields']) + ['completed_at']
 
                 if cost and price and credit_days:
                     # Calcular días efectivos para intereses (excluyendo domingos si aplica)

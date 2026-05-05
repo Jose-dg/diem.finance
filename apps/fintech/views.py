@@ -29,7 +29,7 @@ from .models import (
 )
 from .serializers import (
     UserSerializer, AccountSerializer, TransactionSerializer, CreditSerializer,
-    UserRegistrationSerializer)
+    ClientCreditSerializer, UserRegistrationSerializer)
 from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.fintech.serializers import CustomTokenObtainPairSerializer
 
@@ -75,8 +75,34 @@ class TransactionViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status_code)
 
 class CreditViewSet(viewsets.ModelViewSet):
-    queryset = Credit.objects.all()
     serializer_class = CreditSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        base = Credit.objects.select_related(
+            'user', 'seller', 'seller__user', 'currency', 'periodicity', 'payment', 'subcategory'
+        )
+        if user.is_staff:
+            return base.all()
+        if hasattr(user, 'seller_profile'):
+            return base.filter(seller=user.seller_profile)
+        return Credit.objects.none()
+
+
+class MyCreditsView(APIView):
+    """Créditos del cliente autenticado. Solo lectura, sin datos internos de negocio."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        credits = (
+            Credit.objects
+            .filter(user=request.user)
+            .select_related('currency', 'subcategory', 'subcategory__category')
+            .prefetch_related('installments')
+        )
+        serializer = ClientCreditSerializer(credits, many=True)
+        return Response(serializer.data)
 
 class RecalculateCreditView(APIView):
     """

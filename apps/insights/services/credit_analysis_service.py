@@ -37,8 +37,19 @@ class CreditAnalysisService:
             total_solicitado = creditos_periodo.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
             total_abonado = creditos_periodo.aggregate(total=Sum('total_abonos'))['total'] or Decimal('0.00')
             total_pendiente = creditos_periodo.aggregate(total=Sum('pending_amount'))['total'] or Decimal('0.00')
-            # Ganancias reales del período (respeta fechas y vendedor)
+            # Ganancia teórica: suma de earnings de créditos OTORGADOS en el período
             total_ganancias = creditos_periodo.aggregate(total=Sum('earnings'))['total'] or Decimal('0.00')
+
+            # Ganancia real: earnings de créditos CERRADOS (completed_at) en el período
+            cerrados_periodo = Credit.objects.filter(
+                completed_at__date__range=[start_date, end_date]
+            )
+            if seller_id:
+                try:
+                    cerrados_periodo = cerrados_periodo.filter(seller_id=int(seller_id))
+                except (ValueError, TypeError):
+                    pass
+            total_ganancias_reales = cerrados_periodo.aggregate(total=Sum('earnings'))['total'] or Decimal('0.00')
             
             # Clientes únicos
             clientes_unicos = creditos_periodo.values('user__username').distinct().count()
@@ -68,6 +79,7 @@ class CreditAnalysisService:
                     'total_paid': float(total_abonado),
                     'total_pending': float(total_pendiente),
                     'total_earnings': float(total_ganancias),
+                    'total_realized_earnings': float(total_ganancias_reales),
                     'unique_clients': clientes_unicos,
                     'clients_without_payments': clientes_sin_abonos,
                     'clients_in_default': clientes_atrasados,

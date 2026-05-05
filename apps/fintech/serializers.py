@@ -300,6 +300,24 @@ class CreditDetailSerializer(serializers.ModelSerializer):
         abonos = AccountMethodAmount.objects.filter(credit=obj).order_by('transaction__date')
         return AccountMethodAmountSerializer(abonos, many=True).data
 
+class ClientCreditSerializer(serializers.ModelSerializer):
+    """Vista de crédito para el cliente dueño del mismo. No expone datos internos de negocio."""
+    currency = CurrencySerializer(read_only=True)
+    subcategory = SubCategorySerializer(read_only=True)
+    installments = InstallmentSerializer(many=True, read_only=True)
+    percentage_paid = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = Credit
+        fields = [
+            'uid', 'state', 'price', 'pending_amount', 'total_abonos',
+            'interest', 'credit_days', 'installment_number', 'installment_value',
+            'first_date_payment', 'second_date_payment', 'morosidad_level',
+            'created_at', 'currency', 'subcategory', 'percentage_paid', 'installments',
+        ]
+        read_only_fields = fields
+
+
 class ExpenseSerializer(serializers.ModelSerializer):
     subcategory = SubCategorySerializer()
     user = UserSerializer()

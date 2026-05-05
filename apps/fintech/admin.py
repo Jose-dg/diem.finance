@@ -88,8 +88,8 @@ class UserAdminWithAddress(UserAdmin):
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_staff_role')  # Muestra el nombre del rol y el grupo asociado
-    search_fields = ('name', 'is_staff_role')  # Permite búsqueda por nombre del rol y del grupo
+    list_display = ('name',)
+    search_fields = ('name',)
 
 @admin.register(DocumentType)
 class DocumentAdmin(admin.ModelAdmin):

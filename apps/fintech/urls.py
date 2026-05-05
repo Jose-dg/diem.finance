@@ -6,6 +6,7 @@ from .views import (
     AccountViewSet,
     TransactionViewSet,
     CreditViewSet,
+    MyCreditsView,
     CustomTokenObtainPairView,
     due_today_installments,
     due_tomorrow_installments,
@@ -30,6 +31,7 @@ urlpatterns = [
     path('transactions/<int:pk>/', TransactionViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='transaction-detail'),
     
     path('credits/', CreditViewSet.as_view({'get': 'list', 'post': 'create'}), name='credit-list'),
+    path('credits/mine/', MyCreditsView.as_view(), name='my-credits'),
     path('credits/<int:pk>/', CreditViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='credit-detail'),
     
     path('recalculate-credit/', RecalculateCreditView.as_view(), name='recalculate_credit'),
