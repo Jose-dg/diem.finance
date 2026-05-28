@@ -55,7 +55,6 @@ PROJECT_APPS = [
     'apps.revenue',
     'apps.forecasting',
     'apps.insights',
-    'apps.interactions'
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
