@@ -141,11 +141,8 @@ class CreditService:
         total_late_fees = Decimal('0.00')
         
         for installment in credit.installments.filter(status='overdue'):
-            if installment.days_overdue > 0:
-                # 5% por mes de mora
-                months_overdue = installment.days_overdue / 30
-                late_fee = installment.remaining_amount * Decimal('0.05') * Decimal(str(months_overdue))
-                total_late_fees += late_fee
+            # TODO: usar Installment.calculate_late_fee()
+            total_late_fees += installment.late_fee if installment.late_fee else Decimal('0.00')
         
         return total_late_fees
     
@@ -190,15 +187,15 @@ class CreditService:
         
         # Determinar nivel de morosidad
         if total_overdue_days >= 120:
-            credit.morosidad_level = 'critica'
+            credit.morosidad_level = 'critical_default'
         elif total_overdue_days >= 90:
-            credit.morosidad_level = 'alta'
+            credit.morosidad_level = 'severe_default'
         elif total_overdue_days >= 60:
-            credit.morosidad_level = 'moderada'
+            credit.morosidad_level = 'moderate_default'
         elif total_overdue_days >= 30:
-            credit.morosidad_level = 'leve'
+            credit.morosidad_level = 'mild_default'
         else:
-            credit.morosidad_level = 'al_dia'
+            credit.morosidad_level = 'on_time'
         
         # Marcar como en mora si hay cuotas vencidas
         credit.is_in_default = overdue_installments.exists()

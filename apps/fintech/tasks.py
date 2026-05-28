@@ -1,9 +1,10 @@
 import math
+import time
 from celery import shared_task, group
 from celery.utils.log import get_task_logger
 from django.db import transaction
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, date
 from django.db.models import F, Q
 from decimal import Decimal
 
@@ -59,22 +60,6 @@ def batch_recalculate_credits(self, chunk_size=100):
         'processed': processed_count,
         'errors': error_count
     }
-
-@shared_task(
-    bind=True,
-    name="fintech.update_installment_statuses",
-)
-def update_installment_statuses(self):
-    """
-    Actualiza el estado de todas las cuotas pendientes usando el servicio robusto
-    """
-    try:
-        success, message = InstallmentService.update_all_installment_statuses()
-        logger.info(f"Actualización de estados de cuotas: {message}")
-        return success
-    except Exception as e:
-        logger.error(f"Error actualizando estados de cuotas: {str(e)}")
-        return False
 
 @shared_task(
     bind=True,
@@ -185,57 +170,93 @@ def generate_installments_for_new_credits(self):
 )
 def installment_daily_maintenance(self):
     """
-    Mantenimiento diario de cuotas - TAREA PRINCIPAL OPTIMIZADA
+    Mantenimiento diario de cuotas — tarea central única para mora.
+    Absorbe la responsabilidad de update_installment_statuses y
+    calculate_overdue_installments, que fueron eliminadas.
     """
+    start = time.time()
+    logger.info("Iniciando mantenimiento diario de cuotas...")
+
+    results = {}
+    today = date.today()
+
+    # 1. Recalcular days_overdue y late_fee por cuota, cambiar status si corresponde
     try:
-        logger.info("Iniciando mantenimiento diario de cuotas...")
-        
-        results = {}
-        
-        # 1. Actualizar estados de cuotas
-        try:
-            success, message = InstallmentService.update_all_installment_statuses()
-            results['installment_statuses'] = {'success': success, 'message': message}
-            logger.info(f"Estados actualizados: {message}")
-        except Exception as e:
-            results['installment_statuses'] = {'success': False, 'error': str(e)}
-            logger.error(f"Error actualizando estados: {str(e)}")
-        
-        # 2. Enviar recordatorios
-        try:
-            success, message = InstallmentService.schedule_payment_reminders()
-            results['payment_reminders'] = {'success': success, 'message': message}
-            logger.info(f"Recordatorios enviados: {message}")
-        except Exception as e:
-            results['payment_reminders'] = {'success': False, 'error': str(e)}
-            logger.error(f"Error enviando recordatorios: {str(e)}")
-        
-        # 3. Notificaciones de mora
-        try:
-            from apps.fintech.utils.celery_utils import safe_delay_task
-            count = safe_delay_task(send_overdue_notifications)
-            results['overdue_notifications'] = {'count': count}
-            logger.info(f"Notificaciones enviadas: {count}")
-        except Exception as e:
-            results['overdue_notifications'] = {'error': str(e)}
-            logger.error(f"Error enviando notificaciones: {str(e)}")
-        
-        # 4. Generar cuotas para créditos nuevos
-        try:
-            from apps.fintech.utils.celery_utils import safe_delay_task
-            count = safe_delay_task(generate_installments_for_new_credits)
-            results['new_installments'] = {'count': count}
-            logger.info(f"Cuotas generadas: {count}")
-        except Exception as e:
-            results['new_installments'] = {'error': str(e)}
-            logger.error(f"Error generando cuotas: {str(e)}")
-        
-        logger.info("Mantenimiento diario completado exitosamente")
-        return results
-        
+        overdue_qs = Installment.objects.filter(
+            due_date__lt=today
+        ).exclude(status__in=['paid', 'cancelled']).select_related('credit')
+
+        to_update = []
+        overdue_promoted = 0
+
+        for installment in overdue_qs:
+            installment.days_overdue = (today - installment.due_date).days
+            installment.late_fee = installment.calculate_late_fee()
+            if installment.days_overdue > 3 and installment.status == 'pending':
+                installment.status = 'overdue'
+                overdue_promoted += 1
+            to_update.append(installment)
+
+        if to_update:
+            Installment.objects.bulk_update(to_update, ['days_overdue', 'late_fee', 'status'])
+
+        logger.info(
+            f"Cuotas procesadas: {len(to_update)}, "
+            f"promovidas a 'overdue': {overdue_promoted}"
+        )
+        results['installment_statuses'] = {
+            'processed': len(to_update),
+            'promoted_to_overdue': overdue_promoted,
+        }
     except Exception as e:
-        logger.error(f"Error en mantenimiento diario: {str(e)}")
-        return {'error': str(e)}
+        results['installment_statuses'] = {'error': str(e)}
+        logger.error(f"Error actualizando estados de cuotas: {str(e)}")
+
+    # 2. Marcar parciales con pagos
+    try:
+        partial_count = Installment.objects.filter(
+            status='pending',
+            amount_paid__gt=0
+        ).update(status='partial')
+        results['partial_updated'] = partial_count
+        logger.info(f"Cuotas marcadas como parciales: {partial_count}")
+    except Exception as e:
+        results['partial_updated'] = {'error': str(e)}
+        logger.error(f"Error marcando parciales: {str(e)}")
+
+    # 3. Recordatorios de pago
+    try:
+        success, message = InstallmentService.schedule_payment_reminders()
+        results['payment_reminders'] = {'success': success, 'message': message}
+        logger.info(f"Recordatorios: {message}")
+    except Exception as e:
+        results['payment_reminders'] = {'error': str(e)}
+        logger.error(f"Error programando recordatorios: {str(e)}")
+
+    # 4. Notificaciones de mora
+    try:
+        from apps.fintech.utils.celery_utils import safe_delay_task
+        count = safe_delay_task(send_overdue_notifications)
+        results['overdue_notifications'] = {'count': count}
+        logger.info(f"Notificaciones enviadas: {count}")
+    except Exception as e:
+        results['overdue_notifications'] = {'error': str(e)}
+        logger.error(f"Error enviando notificaciones: {str(e)}")
+
+    # 5. Generar cuotas para créditos nuevos
+    try:
+        from apps.fintech.utils.celery_utils import safe_delay_task
+        count = safe_delay_task(generate_installments_for_new_credits)
+        results['new_installments'] = {'count': count}
+        logger.info(f"Cuotas generadas: {count}")
+    except Exception as e:
+        results['new_installments'] = {'error': str(e)}
+        logger.error(f"Error generando cuotas: {str(e)}")
+
+    elapsed = round(time.time() - start, 2)
+    logger.info(f"Mantenimiento diario completado en {elapsed}s")
+    results['elapsed_seconds'] = elapsed
+    return results
 
 @shared_task
 def check_additional_interest_daily():
@@ -347,36 +368,6 @@ def calculate_installment_fields_batch():
     
     logger.info(f"Procesadas {processed_count} cuotas de {len(all_installments)} identificadas")
     return processed_count
-
-@shared_task
-def calculate_overdue_installments():
-    """Actualiza cuotas vencidas y calcula mora - OPTIMIZADO"""
-    today = timezone.now().date()
-    
-    # Cuotas vencidas que no están marcadas como overdue
-    overdue_installments = Installment.objects.filter(
-        due_date__lt=today,
-        status__in=['pending', 'partial']
-    ).select_related('credit')
-    
-    updated_count = 0
-    for installment in overdue_installments:
-        try:
-            with transaction.atomic():
-                # Actualizar estado usando el servicio
-                success, message = InstallmentService.mark_installment_overdue(installment)
-                
-                if success:
-                    updated_count += 1
-                    logger.info(f"Cuota {installment.id} marcada como vencida")
-                else:
-                    logger.error(f"Error actualizando cuota {installment.id}: {message}")
-                    
-        except Exception as e:
-            logger.error(f"Error actualizando cuota vencida {installment.id}: {str(e)}")
-    
-    logger.info(f"Actualizadas {updated_count} cuotas vencidas")
-    return updated_count
 
 @shared_task
 def update_credit_statuses():

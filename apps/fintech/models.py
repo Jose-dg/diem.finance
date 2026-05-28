@@ -338,6 +338,13 @@ class Credit(models.Model):
         ('critical_default', 'Critical Default')
     ], default='on_time')
 
+    late_fee_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal('0.0500'),
+        help_text="Tasa mensual de recargo por mora. Ej: 0.05 = 5% mensual. Configurable por crédito al momento de creación."
+    )
+
     def __str__(self):
         return f"{self.uid} - {self.user} - {self.subcategory}: Credit:{self.price}, pending:{self.pending_amount}"
 
@@ -722,6 +729,86 @@ class CreditAdjustment(models.Model):
         signo = '+' if self.type and self.type.is_positive else '-'
         return f"{self.type.name if self.type else 'Tipo desconocido'} {signo}${self.amount} al crédito {self.credit_id or 'sin asignar'} ({self.added_on})"
 
+class FeeDecision(models.Model):
+    """
+    Registro de cada decisión tomada sobre un recargo por mora calculado.
+    Cuando el cobrador ve un recargo en la app y decide aplicarlo, reducirlo
+    o condonarlo, esa decisión queda aquí con su justificación.
+
+    Este modelo alimenta:
+    - El dashboard de gerencia (auditoría de condonaciones por cobrador)
+    - El proceso de coaching individual (patrones de permisividad)
+    - El cálculo de recargos efectivamente cobrados vs calculados
+    """
+
+    DECISION_CHOICES = [
+        ('applied', 'Aplicó recargo completo'),
+        ('partial', 'Aplicó recargo parcial'),
+        ('waived',  'Condonó recargo'),
+    ]
+
+    installment = models.ForeignKey(
+        'Installment',
+        on_delete=models.CASCADE,
+        related_name='fee_decisions',
+        help_text="Cuota sobre la cual se tomó la decisión de recargo"
+    )
+    seller = models.ForeignKey(
+        'Seller',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fee_decisions',
+        help_text="Cobrador que tomó la decisión. Null si fue registrada desde oficina."
+    )
+    calculated_fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Monto de recargo que el sistema calculó al momento de la decisión"
+    )
+    applied_fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Monto de recargo que realmente se cobró al cliente"
+    )
+    decision = models.CharField(
+        max_length=10,
+        choices=DECISION_CHOICES,
+        help_text="Tipo de decisión tomada sobre el recargo"
+    )
+    reason = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Justificación obligatoria cuando decision es 'partial' o 'waived'"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Decisión de recargo'
+        verbose_name_plural = 'Decisiones de recargo'
+
+    def __str__(self):
+        seller_name = self.seller.user.username if self.seller else 'oficina'
+        return (
+            f"{self.get_decision_display()} — "
+            f"Cuota #{self.installment.number} "
+            f"Crédito {self.installment.credit.uid} — "
+            f"{seller_name} — {self.created_at.date()}"
+        )
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.decision in ('partial', 'waived') and not self.reason:
+            raise ValidationError({
+                'reason': 'La justificación es obligatoria cuando se condona o reduce un recargo.'
+            })
+        if self.decision == 'applied' and self.applied_fee != self.calculated_fee:
+            raise ValidationError({
+                'applied_fee': 'Si la decisión es "aplicó recargo completo", applied_fee debe ser igual a calculated_fee.'
+            })
+
+
 # TODO: PENDIENTE - Rediseñar modelo Installment
 # El modelo Installment actual está mal diseñado y necesita refactoring completo
 # PROBLEMAS IDENTIFICADOS:
@@ -794,6 +881,52 @@ class Installment(models.Model):
     class Meta:
         unique_together = ('credit', 'number')
         ordering = ['due_date']
+
+    def calculate_late_fee(self) -> Decimal:
+        """
+        Calcula el recargo por mora de esta cuota a la fecha de hoy.
+
+        Reglas de negocio:
+        - Período de gracia: 3 días desde due_date. El recargo empieza a correr
+          en due_date + 3 días. Si hoy está dentro del período de gracia, retorna 0.
+        - Tasa: credit.late_fee_rate (configurable por crédito, default 5% mensual).
+        - Base de cálculo: remaining_amount (saldo pendiente de esta cuota).
+        - Fórmula: remaining_amount × rate × (days_late / 30)
+        - Tope máximo: 50% del monto original de la cuota (self.amount × 0.50).
+        - Si la cuota está pagada (status == 'paid'), retorna 0.
+        - Si due_date es None, retorna 0.
+        """
+        from datetime import date
+
+        if not self.due_date:
+            return Decimal('0.00')
+
+        if self.status == 'paid':
+            return Decimal('0.00')
+
+        GRACE_DAYS = 3
+        effective_due = self.due_date + timedelta(days=GRACE_DAYS)
+        today = date.today()
+
+        if today <= effective_due:
+            return Decimal('0.00')
+
+        days_late = (today - effective_due).days
+
+        rate = Decimal('0.0500')
+        if self.credit and self.credit.late_fee_rate:
+            rate = Decimal(str(self.credit.late_fee_rate))
+
+        remaining = self.remaining_amount if self.remaining_amount else self.amount
+        if not remaining or remaining <= 0:
+            return Decimal('0.00')
+
+        raw_fee = remaining * rate * (Decimal(str(days_late)) / Decimal('30'))
+
+        cap = (self.amount * Decimal('0.50')) if self.amount else raw_fee
+
+        result = min(raw_fee, cap)
+        return result.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     def mark_as_paid(self, amount_paid=None):
         if amount_paid is None:

@@ -54,7 +54,8 @@ PROJECT_APPS = [
     'apps.dashboard',
     'apps.revenue',
     'apps.forecasting',
-    'apps.insights'
+    'apps.insights',
+    'apps.interactions'
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
@@ -253,10 +254,7 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.fintech.tasks.installment_daily_maintenance',
         'schedule': crontab(hour=6, minute=0),  # 6:00 AM
     },
-    'update-installment-statuses': {
-        'task': 'apps.fintech.tasks.update_installment_statuses',
-        'schedule': crontab(minute='*/30'),  # Cada 30 minutos
-    },
+    # update-installment-statuses fue eliminada — responsabilidad absorbida por installment-daily-maintenance
     'send-payment-reminders': {
         'task': 'apps.fintech.tasks.send_payment_reminders',
         'schedule': crontab(hour=9, minute=0),  # 9:00 AM

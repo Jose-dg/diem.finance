@@ -12,8 +12,9 @@ from .views import (
     due_tomorrow_installments,
     upcoming_installments,
     overdue_installments,
-    collector_dashboard
+    collector_dashboard,
 )
+from .views_collector import CollectorPortfolioView, FeeDecisionView
 
 urlpatterns = [
 
@@ -42,6 +43,8 @@ urlpatterns = [
     path('collector/due-tomorrow/', due_tomorrow_installments, name='due-tomorrow-installments'),
     path('collector/upcoming/', upcoming_installments, name='upcoming-installments'),
     path('collector/overdue/', overdue_installments, name='overdue-installments'),
+    path('collector/portfolio/<int:seller_id>/', CollectorPortfolioView.as_view(), name='collector-portfolio'),
+    path('collector/fee-decision/', FeeDecisionView.as_view(), name='collector-fee-decision'),
 
 ]
 

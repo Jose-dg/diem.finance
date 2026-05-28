@@ -139,43 +139,39 @@ class InstallmentService:
     def update_all_installment_statuses():
         """
         Actualiza el estado de todas las cuotas pendientes - OPTIMIZADO
+        days_overdue se calcula siempre desde due_date, nunca se acumula.
+        late_fee se delega a Installment.calculate_late_fee() (ver Bug 3).
         """
         try:
             today = timezone.now().date()
-            
-            # Actualización masiva con queries optimizadas
+
             with transaction.atomic():
-                # 1. Marcar como vencidas las cuotas pendientes que pasaron la fecha
-                overdue_count = Installment.objects.filter(
-                    status__in=['pending', 'partial'],
-                    due_date__lt=today
-                ).update(
-                    status='overdue',
-                    days_overdue=F('days_overdue') + 1
-                )
-                
-                # 2. Calcular recargos por mora en batch
-                overdue_installments = Installment.objects.filter(
-                    status='overdue'
-                ).annotate(
-                    calculated_days=F('days_overdue')
-                )
-                
-                for installment in overdue_installments:
-                    # Calcular recargo (5% por mes)
-                    months_overdue = installment.calculated_days / 30
-                    late_fee = installment.remaining_amount * Decimal('0.05') * Decimal(str(months_overdue))
-                    installment.late_fee = late_fee
-                    installment.save(update_fields=['late_fee'])
-                
-                # 3. Marcar como parciales las que tienen pagos
-                partial_count = Installment.objects.filter(
+                # 1. Marcar como parciales las pendientes con pagos
+                Installment.objects.filter(
                     status='pending',
                     amount_paid__gt=0
                 ).update(status='partial')
-            
-            return True, f"Se actualizaron {overdue_count + partial_count} cuotas"
-            
+
+                # 2. Recalcular days_overdue desde due_date para todas las no pagadas/canceladas
+                overdue_qs = Installment.objects.filter(
+                    due_date__lt=today
+                ).exclude(status__in=['paid', 'cancelled']).select_related('credit')
+
+                to_update = []
+                overdue_count = 0
+                for installment in overdue_qs:
+                    installment.days_overdue = (today - installment.due_date).days
+                    # TODO: usar Installment.calculate_late_fee()
+                    if installment.days_overdue > 3 and installment.status == 'pending':
+                        installment.status = 'overdue'
+                        overdue_count += 1
+                    to_update.append(installment)
+
+                if to_update:
+                    Installment.objects.bulk_update(to_update, ['days_overdue', 'status'])
+
+            return True, f"Se actualizaron {len(to_update)} cuotas, {overdue_count} pasaron a 'overdue'"
+
         except Exception as e:
             return False, f"Error actualizando estados: {str(e)}"
     
@@ -345,14 +341,7 @@ class InstallmentService:
             # Recalcular monto restante
             installment.remaining_amount = installment.amount - installment.amount_paid
             
-            # Recalcular recargo por mora si aplica
-            if installment.days_overdue > 0:
-                # Calcular 5% de recargo por cada 30 días de mora
-                late_fee_rate = Decimal('0.05')  # 5%
-                months_overdue = installment.days_overdue / 30
-                installment.late_fee = installment.remaining_amount * late_fee_rate * Decimal(str(months_overdue))
-            else:
-                installment.late_fee = Decimal('0.00')
+            # TODO: usar Installment.calculate_late_fee()
             
             # Actualizar estado si es necesario
             if installment.remaining_amount == 0:
@@ -386,12 +375,7 @@ class InstallmentService:
                 installment.status = 'overdue'
                 installment.days_overdue = (timezone.now().date() - installment.due_date).days
                 
-                # Calcular recargo por mora
-                if installment.days_overdue > 0:
-                    late_fee_rate = Decimal('0.05')  # 5%
-                    months_overdue = installment.days_overdue / 30
-                    installment.late_fee = installment.remaining_amount * late_fee_rate * Decimal(str(months_overdue))
-                
+                # TODO: usar Installment.calculate_late_fee()
                 installment.save(update_fields=['status', 'days_overdue', 'late_fee'])
                 return True, "Cuota marcada como vencida"
             else:

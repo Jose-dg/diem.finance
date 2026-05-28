@@ -2,29 +2,30 @@ from django.contrib import admin
 from django.contrib import messages
 
 from .models import (
-    AccountMethodAmount, 
-    Adjustment, CreditAdjustment, 
-    DocumentType, 
-    Installment, 
-    Label, 
-    Seller, 
-    User, 
-    Address, 
-    CategoryType, 
-    Category, 
-    SubCategory, 
-    Account, 
-    Transaction, 
-    Credit, 
-    Expense, 
-    PhoneNumber, 
-    Country, ParamsLocation, 
-    Identifier, 
-    Language, 
-    Currency, 
-    Periodicity, 
-    Role
-    )
+    AccountMethodAmount,
+    Adjustment, CreditAdjustment,
+    DocumentType,
+    FeeDecision,
+    Installment,
+    Label,
+    Seller,
+    User,
+    Address,
+    CategoryType,
+    Category,
+    SubCategory,
+    Account,
+    Transaction,
+    Credit,
+    Expense,
+    PhoneNumber,
+    Country, ParamsLocation,
+    Identifier,
+    Language,
+    Currency,
+    Periodicity,
+    Role,
+)
 from django import forms
 from django.core.exceptions import ValidationError
 from .models import Transaction, Credit
@@ -261,6 +262,17 @@ class CreditAdmin(admin.ModelAdmin):
     inlines = [InstallmentInline]
 
     exclude = ('interest', 'refinancing', 'total_abonos', 'pending_amount', 'installment_number', 'installment_value', 'is_in_default', 'morosidad_level')
+    fieldsets = (
+        (None, {
+            'fields': (
+                'registered_by', 'seller', 'user', 'state', 'subcategory',
+                'cost', 'price', 'currency', 'description',
+            )
+        }),
+        ('Condiciones financieras', {
+            'fields': ('periodicity', 'payment', 'credit_days', 'first_date_payment', 'second_date_payment', 'late_fee_rate'),
+        }),
+    )
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:
@@ -368,6 +380,13 @@ class CreditAdjustmentAdmin(admin.ModelAdmin):
     date_hierarchy = 'added_on'
     ordering = ('-added_on',)
     
+
+@admin.register(FeeDecision)
+class FeeDecisionAdmin(admin.ModelAdmin):
+    list_display = ['installment', 'seller', 'calculated_fee', 'applied_fee', 'decision', 'created_at']
+    list_filter = ['decision', 'seller', 'created_at']
+    readonly_fields = ['calculated_fee', 'created_at']
+
 
 @admin.register(Installment)
 class InstallmentAdmin(admin.ModelAdmin):
