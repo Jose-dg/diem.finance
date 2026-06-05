@@ -55,9 +55,12 @@ def _installment_to_dict(inst: Installment, today: date) -> dict:
     return {
         'installment_id': inst.id,
         'credit_uid': str(inst.credit.uid),
+        'due_date': inst.due_date.isoformat() if inst.due_date else None,
         'client_name': client_name,
         'client_id': client.id,
         'installment_number': inst.number,
+        'credit_periodicity_name': inst.credit.periodicity.name if inst.credit.periodicity else None,
+        'credit_periodicity_days': inst.credit.periodicity.days if inst.credit.periodicity else None,
         'amount_due': str(inst.amount or '0.00'),
         'amount_paid': str(inst.amount_paid),
         'remaining_amount': str(inst.remaining_amount),
@@ -72,6 +75,147 @@ def _installment_to_dict(inst: Installment, today: date) -> dict:
 
 
 PRIORITY_ORDER = {'urgent': 0, 'high': 1, 'medium': 2, 'low': 3}
+
+
+def _portfolio_payload_for_seller(seller: Seller) -> dict:
+    today = date.today()
+    horizon = today + timedelta(days=30)
+
+    # Cuotas relevantes: vencidas (sin límite) + próximas 30 días
+    installments = (
+        Installment.objects
+        .filter(
+            credit__seller=seller,
+            status__in=['pending', 'partial', 'overdue'],
+        )
+        .filter(
+            # vencidas sin límite de antigüedad O que vencen en los próximos 30 días
+            due_date__lte=horizon
+        )
+        .exclude(status='cancelled')
+        .select_related(
+            'credit__user',
+            'credit__seller',
+            'credit__periodicity',
+        )
+        .order_by('due_date')
+    )
+
+    # Summary
+    total_clients = set()
+    clients_overdue = set()
+    clients_critical = set()
+    total_pending = 0
+    total_overdue_count = 0
+    total_amount_pending = Decimal('0')
+    total_late_fees = Decimal('0')
+    periodicity_summary = {}
+
+    schedule: dict[str, list] = defaultdict(list)
+
+    for inst in installments:
+        credit = inst.credit
+        client_id = credit.user_id
+        total_clients.add(client_id)
+
+        if inst.status == 'overdue':
+            clients_overdue.add(client_id)
+            total_overdue_count += 1
+        if credit.morosidad_level == 'critical_default':
+            clients_critical.add(client_id)
+
+        total_pending += 1
+        total_amount_pending += inst.remaining_amount or Decimal('0')
+        fee = inst.calculate_late_fee()
+        total_late_fees += fee
+
+        periodicity = credit.periodicity
+        periodicity_key = (
+            periodicity.days if periodicity else None,
+            periodicity.name if periodicity else None,
+        )
+        periodicity_bucket = periodicity_summary.setdefault(
+            periodicity_key,
+            {
+                'periodicity_days': periodicity.days if periodicity else None,
+                'periodicity_name': periodicity.name if periodicity else None,
+                'installments_count': 0,
+                'total_remaining_amount': Decimal('0'),
+                'total_due': Decimal('0'),
+            },
+        )
+        periodicity_bucket['installments_count'] += 1
+        periodicity_bucket['total_remaining_amount'] += inst.remaining_amount or Decimal('0')
+        periodicity_bucket['total_due'] += (inst.remaining_amount or Decimal('0')) + fee
+
+        key = inst.due_date.isoformat() if inst.due_date else 'sin-fecha'
+        schedule[key].append((inst, today))
+
+    # Ordenar schedule por fecha, dentro de cada fecha por prioridad y nombre
+    ordered_schedule = {}
+    for key in sorted(schedule.keys()):
+        items = schedule[key]
+        entries = [_installment_to_dict(inst, today) for inst, _ in items]
+        entries.sort(
+            key=lambda x: (PRIORITY_ORDER.get(x['priority'], 99), x['client_name'])
+        )
+        ordered_schedule[key] = entries
+
+    clients_on_time = len(total_clients) - len(clients_overdue)
+
+    seller_name = f"{seller.user.first_name} {seller.user.last_name}".strip() or seller.user.username
+    installments_by_periodicity = [
+        {
+            'periodicity_days': item['periodicity_days'],
+            'periodicity_name': item['periodicity_name'],
+            'installments_count': item['installments_count'],
+            'total_remaining_amount': str(item['total_remaining_amount'].quantize(Decimal('0.01'))),
+            'total_due': str(item['total_due'].quantize(Decimal('0.01'))),
+        }
+        for item in periodicity_summary.values()
+    ]
+    installments_by_periodicity.sort(
+        key=lambda item: (
+            item['periodicity_days'] is None,
+            item['periodicity_days'] or 0,
+            item['periodicity_name'] or '',
+        )
+    )
+
+    return {
+        'seller': {
+            'id': seller.id,
+            'name': seller_name,
+            'username': seller.user.username,
+        },
+        'summary': {
+            'total_clients': len(total_clients),
+            'clients_on_time': clients_on_time,
+            'clients_overdue': len(clients_overdue),
+            'clients_critical': len(clients_critical),
+            'total_installments_pending': total_pending,
+            'total_installments_overdue': total_overdue_count,
+            'total_amount_pending': str(total_amount_pending.quantize(Decimal('0.01'))),
+            'total_late_fees_pending': str(total_late_fees.quantize(Decimal('0.01'))),
+            'installments_by_periodicity': installments_by_periodicity,
+        },
+        'schedule': ordered_schedule,
+    }
+
+
+class MyCollectorPortfolioView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        seller = getattr(request.user, 'seller_profile', None)
+
+        if not seller:
+            return Response(
+                {'detail': 'El usuario autenticado no tiene un perfil de cobrador asociado.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return Response(_portfolio_payload_for_seller(seller))
 
 
 class CollectorPortfolioView(APIView):
@@ -96,91 +240,7 @@ class CollectorPortfolioView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        today = date.today()
-        horizon = today + timedelta(days=30)
-
-        # Cuotas relevantes: vencidas (sin límite) + próximas 30 días
-        installments = (
-            Installment.objects
-            .filter(
-                credit__seller=seller,
-                status__in=['pending', 'partial', 'overdue'],
-            )
-            .filter(
-                # vencidas sin límite de antigüedad O que vencen en los próximos 30 días
-                due_date__lte=horizon
-            )
-            .exclude(status='cancelled')
-            .select_related(
-                'credit__user',
-                'credit__seller',
-                'credit__periodicity',
-            )
-            .order_by('due_date')
-        )
-
-        # Summary
-        total_clients = set()
-        clients_overdue = set()
-        clients_critical = set()
-        total_pending = 0
-        total_overdue_count = 0
-        total_amount_pending = Decimal('0')
-        total_late_fees = Decimal('0')
-
-        schedule: dict[str, list] = defaultdict(list)
-
-        for inst in installments:
-            credit = inst.credit
-            client_id = credit.user_id
-            total_clients.add(client_id)
-
-            if inst.status == 'overdue':
-                clients_overdue.add(client_id)
-                total_overdue_count += 1
-            if credit.morosidad_level == 'critical_default':
-                clients_critical.add(client_id)
-
-            total_pending += 1
-            total_amount_pending += inst.remaining_amount or Decimal('0')
-            fee = inst.calculate_late_fee()
-            total_late_fees += fee
-
-            key = inst.due_date.isoformat() if inst.due_date else 'sin-fecha'
-            schedule[key].append((inst, today))
-
-        # Ordenar schedule por fecha, dentro de cada fecha por prioridad y nombre
-        ordered_schedule = {}
-        for key in sorted(schedule.keys()):
-            items = schedule[key]
-            entries = [_installment_to_dict(inst, today) for inst, _ in items]
-            entries.sort(
-                key=lambda x: (PRIORITY_ORDER.get(x['priority'], 99), x['client_name'])
-            )
-            ordered_schedule[key] = entries
-
-        clients_on_time = len(total_clients) - len(clients_overdue)
-
-        seller_name = f"{seller.user.first_name} {seller.user.last_name}".strip() or seller.user.username
-
-        return Response({
-            'seller': {
-                'id': seller.id,
-                'name': seller_name,
-                'username': seller.user.username,
-            },
-            'summary': {
-                'total_clients': len(total_clients),
-                'clients_on_time': clients_on_time,
-                'clients_overdue': len(clients_overdue),
-                'clients_critical': len(clients_critical),
-                'total_installments_pending': total_pending,
-                'total_installments_overdue': total_overdue_count,
-                'total_amount_pending': str(total_amount_pending.quantize(Decimal('0.01'))),
-                'total_late_fees_pending': str(total_late_fees.quantize(Decimal('0.01'))),
-            },
-            'schedule': ordered_schedule,
-        })
+        return Response(_portfolio_payload_for_seller(seller))
 
 
 class FeeDecisionView(APIView):
