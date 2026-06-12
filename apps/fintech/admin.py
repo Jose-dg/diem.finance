@@ -266,7 +266,7 @@ class CreditAdmin(admin.ModelAdmin):
         (None, {
             'fields': (
                 'registered_by', 'seller', 'user', 'state', 'subcategory',
-                'cost', 'price', 'currency', 'description',
+                'cost', 'price', 'currency', 'created_at', 'description',
             )
         }),
         ('Condiciones financieras', {
